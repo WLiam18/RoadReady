@@ -1,0 +1,6 @@
+@RoadReady.BookingService_HostAddress = http://localhost:5033
+
+GET {{RoadReady.BookingService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

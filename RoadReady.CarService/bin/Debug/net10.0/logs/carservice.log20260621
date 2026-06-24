@@ -1,0 +1,94 @@
+2026-06-21 22:55:37,124 [108] INFO  Microsoft.Hosting.Lifetime - Application is shutting down...
+2026-06-21 22:55:53,233 [1] WARN  Microsoft.EntityFrameworkCore.Model.Validation - No store type was specified for the decimal property 'PricePerDay' on entity type 'Car'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+2026-06-21 22:55:58,685 [1] WARN  Microsoft.EntityFrameworkCore.Model.Validation - No store type was specified for the decimal property 'PricePerDay' on entity type 'Car'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+2026-06-21 22:55:59,036 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (22ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT 1
+2026-06-21 22:55:59,041 [1] INFO  Microsoft.EntityFrameworkCore.Migrations - Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+2026-06-21 22:55:59,090 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (44ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+SELECT @result
+2026-06-21 22:55:59,186 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (62ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+2026-06-21 22:55:59,197 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT 1
+2026-06-21 22:55:59,200 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+2026-06-21 22:55:59,319 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (117ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [MigrationId], [ProductVersion]
+FROM [__EFMigrationsHistory]
+ORDER BY [MigrationId];
+2026-06-21 22:55:59,328 [1] INFO  Microsoft.EntityFrameworkCore.Migrations - Applying migration '20260621172553_AddReviewSystem'.
+2026-06-21 22:55:59,464 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (125ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE TABLE [Reviews] (
+    [Id] uniqueidentifier NOT NULL,
+    [CarId] int NOT NULL,
+    [UserId] uniqueidentifier NOT NULL,
+    [Rating] int NOT NULL,
+    [Comment] nvarchar(max) NOT NULL,
+    [CreatedAt] datetime2 NOT NULL,
+    CONSTRAINT [PK_Reviews] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_Reviews_Cars_CarId] FOREIGN KEY ([CarId]) REFERENCES [Cars] ([Id]) ON DELETE CASCADE
+);
+2026-06-21 22:55:59,489 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (18ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX [IX_Reviews_CarId] ON [Reviews] ([CarId]);
+2026-06-21 22:55:59,504 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (15ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20260621172553_AddReviewSystem', N'10.0.0');
+2026-06-21 22:55:59,525 [1] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (17ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+SELECT @result
+2026-06-21 22:56:22,602 [1] INFO  Microsoft.Hosting.Lifetime - Now listening on: http://localhost:5002
+2026-06-21 22:56:22,608 [1] INFO  Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+2026-06-21 22:56:22,608 [1] INFO  Microsoft.Hosting.Lifetime - Hosting environment: Development
+2026-06-21 22:56:22,608 [1] INFO  Microsoft.Hosting.Lifetime - Content root path: /Users/williamgiftson/Project/RoadReady/RoadReady.CarService
+2026-06-21 23:05:54,615 [34] WARN  Microsoft.EntityFrameworkCore.Model.Validation - No store type was specified for the decimal property 'PricePerDay' on entity type 'Car'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+2026-06-21 23:05:54,945 [40] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (30ms) [Parameters=[@id='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [b].[Id], [b].[Country], [b].[CreatedAt], [b].[LogoUrl], [b].[Name]
+FROM [Brands] AS [b]
+WHERE [b].[Id] = @id
+2026-06-21 23:05:55,275 [40] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (234ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?' (Size = 4000), @p2='?' (DbType = DateTime2), @p3='?' (Size = 4000), @p4='?' (Size = 4000), @p5='?' (Size = 4000), @p6='?' (Size = 450), @p7='?' (Size = 4000), @p8='?' (Size = 4000), @p9='?' (Size = 4000), @p10='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p11='?' (DbType = Int32), @p12='?' (Size = 4000), @p13='?' (Size = 4000), @p14='?' (DbType = DateTime2), @p15='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Cars] ([BrandId], [Color], [CreatedAt], [Description], [FuelType], [ImageUrls], [LicensePlate], [Location], [Make], [Model], [PricePerDay], [SeatingCapacity], [Status], [Transmission], [UpdatedAt], [Year])
+OUTPUT INSERTED.[Id]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15);
+2026-06-21 23:05:55,286 [40] INFO  RoadReady.CarService.Implementations.CarService - Car created successfully with license plate: TN01AL2345
+2026-06-21 23:14:18,694 [59] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (96ms) [Parameters=[@id='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[BrandId], [c].[Color], [c].[CreatedAt], [c].[Description], [c].[FuelType], [c].[ImageUrls], [c].[LicensePlate], [c].[Location], [c].[Make], [c].[Model], [c].[PricePerDay], [c].[SeatingCapacity], [c].[Status], [c].[Transmission], [c].[UpdatedAt], [c].[Year], [b].[Id], [b].[Country], [b].[CreatedAt], [b].[LogoUrl], [b].[Name]
+FROM [Cars] AS [c]
+INNER JOIN [Brands] AS [b] ON [c].[BrandId] = [b].[Id]
+WHERE [c].[Id] = @id
+2026-06-21 23:18:20,656 [63] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (14ms) [Parameters=[@id='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[BrandId], [c].[Color], [c].[CreatedAt], [c].[Description], [c].[FuelType], [c].[ImageUrls], [c].[LicensePlate], [c].[Location], [c].[Make], [c].[Model], [c].[PricePerDay], [c].[SeatingCapacity], [c].[Status], [c].[Transmission], [c].[UpdatedAt], [c].[Year], [b].[Id], [b].[Country], [b].[CreatedAt], [b].[LogoUrl], [b].[Name]
+FROM [Cars] AS [c]
+INNER JOIN [Brands] AS [b] ON [c].[BrandId] = [b].[Id]
+WHERE [c].[Id] = @id
+2026-06-21 23:18:20,724 [65] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (44ms) [Parameters=[@carId='?' (DbType = Int32), @userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Reviews] AS [r]
+        WHERE [r].[CarId] = @carId AND [r].[UserId] = @userId) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-21 23:18:20,803 [65] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (58ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Int32), @p2='?' (Size = 4000), @p3='?' (DbType = DateTime2), @p4='?' (DbType = Int32), @p5='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Reviews] ([Id], [CarId], [Comment], [CreatedAt], [Rating], [UserId])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5);
+2026-06-21 23:18:20,803 [65] INFO  RoadReady.CarService.Implementations.ReviewService - Review added for CarId: 2 by UserId: 2399f0ae-2f44-40df-8620-56e18699a58b
+2026-06-21 23:19:28,040 [70] INFO  Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (56ms) [Parameters=[@carId='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT [r].[Id], [r].[CarId], [r].[Comment], [r].[CreatedAt], [r].[Rating], [r].[UserId]
+FROM [Reviews] AS [r]
+WHERE [r].[CarId] = @carId
+ORDER BY [r].[CreatedAt] DESC
+2026-06-21 23:25:54,893 [85] INFO  Microsoft.Hosting.Lifetime - Application is shutting down...

@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="RoadReady.AuthService/RoadReady.AuthService.csproj" />
+  <Project Path="RoadReady.BookingService/RoadReady.BookingService.csproj" />
+  <Project Path="RoadReady.CarService/RoadReady.CarService.csproj" />
+  <Project Path="RoadReady.Gateway/RoadReady.Gateway.csproj" />
+  <Project Path="RoadReady.Shared/RoadReady.Shared.csproj" />
+  
+  <Project Path="RoadReady.AuthService.Tests/RoadReady.AuthService.Tests.csproj" />
+  <Project Path="RoadReady.BookingService.Tests/RoadReady.BookingService.Tests.csproj" />
+  <Project Path="RoadReady.CarService.Tests/RoadReady.CarService.Tests.csproj" />
+</Solution>

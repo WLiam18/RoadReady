@@ -1,0 +1,6 @@
+@RoadReady.CarService_HostAddress = http://localhost:5177
+
+GET {{RoadReady.CarService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

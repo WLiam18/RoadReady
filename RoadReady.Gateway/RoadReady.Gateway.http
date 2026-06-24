@@ -1,0 +1,6 @@
+@RoadReady.Gateway_HostAddress = http://localhost:5099
+
+GET {{RoadReady.Gateway_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
