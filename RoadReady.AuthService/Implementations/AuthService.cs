@@ -3,6 +3,7 @@ using Google.Apis.Auth;
 using RoadReady.AuthService.Interfaces;
 using RoadReady.AuthService.Models;
 using RoadReady.Shared.DTOs.Auth;
+using RoadReady.Shared.Email;
 using RoadReady.Shared.Enums;
 using RoadReady.Shared.Responses;
 
@@ -14,17 +15,20 @@ public class AuthService : IAuthService
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ILogger<AuthService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IEmailService _emailService;
 
     public AuthService(
         IAuthRepository authRepository,
         IJwtTokenService jwtTokenService,
         ILogger<AuthService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IEmailService emailService)
     {
         _authRepository = authRepository;
         _jwtTokenService = jwtTokenService;
         _logger = logger;
         _configuration = configuration;
+        _emailService = emailService;
     }
 
     public async Task<ApiResponse<AuthResponseDto>> RegisterAsync(RegisterRequestDto request)
@@ -56,25 +60,11 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User registered successfully with email: {Email}", user.Email);
 
-        var accessToken = _jwtTokenService.GenerateToken(user);
+        var tokens = await GenerateTokensAsync(user);
 
-        var response = new AuthResponseDto
-        {
-            AccessToken = accessToken,
-            RefreshToken = "not-implemented",
-            User = new UserDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Role = user.Role,
-                CreatedAt = user.CreatedAt
-            }
-        };
+        await _emailService.SendWelcomeAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim());
 
-        return ApiResponse<AuthResponseDto>.Created(response, "User registered successfully.");
+        return ApiResponse<AuthResponseDto>.Created(tokens, "User registered successfully.");
     }
 
     public async Task<ApiResponse<AuthResponseDto>> RegisterAgentAsync(RegisterRequestDto request)
@@ -96,7 +86,7 @@ public class AuthService : IAuthService
             PhoneNumber = request.PhoneNumber,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             AuthProvider = "Local",
-            Role = UserRole.RentalAgent, // Securely hardcoded to RentalAgent
+            Role = UserRole.RentalAgent,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -113,25 +103,11 @@ public class AuthService : IAuthService
             return ApiResponse<AuthResponseDto>.Fail("An error occurred while creating the agent account.");
         }
 
-        var accessToken = _jwtTokenService.GenerateToken(user);
+        var tokens = await GenerateTokensAsync(user);
 
-        var response = new AuthResponseDto
-        {
-            AccessToken = accessToken,
-            RefreshToken = "not-implemented",
-            User = new UserDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Role = user.Role,
-                CreatedAt = user.CreatedAt
-            }
-        };
+        await _emailService.SendWelcomeAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim());
 
-        return ApiResponse<AuthResponseDto>.Created(response, "Rental Agent registered successfully.");
+        return ApiResponse<AuthResponseDto>.Created(tokens, "Rental Agent registered successfully.");
     }
 
     public async Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginRequestDto request)
@@ -152,30 +128,14 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User logged in successfully with email: {Email}", user.Email);
 
-        var accessToken = _jwtTokenService.GenerateToken(user);
+        var tokens = await GenerateTokensAsync(user);
 
-        var response = new AuthResponseDto
-        {
-            AccessToken = accessToken,
-            RefreshToken = "not-implemented",
-            User = new UserDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Role = user.Role,
-                CreatedAt = user.CreatedAt
-            }
-        };
-
-        return ApiResponse<AuthResponseDto>.Ok(response, "Login successful.");
+        return ApiResponse<AuthResponseDto>.Ok(tokens, "Login successful.");
     }
 
     public async Task<ApiResponse<AuthResponseDto>> LoginWithGoogleAsync(string credential)
     {
-        var clientId = _configuration["Google:ClientId"];
+        var clientId = _configuration["Authentication:Google:ClientId"] ?? _configuration["Google:ClientId"];
 
         if (string.IsNullOrWhiteSpace(clientId))
         {
@@ -207,7 +167,7 @@ public class AuthService : IAuthService
                 LastName = payload.FamilyName ?? string.Empty,
                 Email = normalizedEmail,
                 PhoneNumber = string.Empty,
-                PasswordHash = null, 
+                PasswordHash = null,
                 GoogleId = payload.Subject,
                 AuthProvider = "Google",
                 ProfileImageUrl = payload.Picture,
@@ -240,25 +200,9 @@ public class AuthService : IAuthService
 
         await _authRepository.SaveChangesAsync();
 
-        var accessToken = _jwtTokenService.GenerateToken(user);
+        var tokens = await GenerateTokensAsync(user);
 
-        var response = new AuthResponseDto
-        {
-            AccessToken = accessToken,
-            RefreshToken = "not-implemented",
-            User = new UserDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Role = user.Role,
-                CreatedAt = user.CreatedAt
-            }
-        };
-
-        return ApiResponse<AuthResponseDto>.Ok(response, "Google login successful.");
+        return ApiResponse<AuthResponseDto>.Ok(tokens, "Google login successful.");
     }
 
     public async Task<ApiResponse<string>> ForgotPasswordAsync(ForgotPasswordRequestDto request)
@@ -269,12 +213,61 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            return ApiResponse<string>.Fail("No account found with this email.");
+            return ApiResponse<string>.Ok("If an account with that email exists, a password reset link has been sent.", "Password reset request submitted.");
         }
 
-        _logger.LogInformation("Password reset requested for email: {Email}", user.Email);
+        var resetToken = new PasswordResetToken
+        {
+            UserId = user.Id,
+            Token = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
 
-        return ApiResponse<string>.Ok("Password reset link would be sent here.", "Password reset request submitted.");
+        await _authRepository.AddPasswordResetTokenAsync(resetToken);
+        await _authRepository.SaveChangesAsync();
+
+        var frontendBaseUrl = _configuration["App:FrontendBaseUrl"] ?? "http://localhost:3000";
+        var resetLink = $"{frontendBaseUrl.TrimEnd('/')}/reset-password?token={resetToken.Token}&email={Uri.EscapeDataString(user.Email)}";
+
+        _logger.LogInformation("Password reset requested for email: {Email}. Reset link: {Link}", user.Email, resetLink);
+
+        await _emailService.SendPasswordResetLinkAsync(
+            user.Email,
+            $"{user.FirstName} {user.LastName}".Trim(),
+            resetLink,
+            resetToken.Token,
+            resetToken.ExpiresAt);
+
+        return ApiResponse<string>.Ok("If an account with that email exists, a password reset link has been sent.", "Password reset request submitted.");
+    }
+
+    public async Task<ApiResponse<string>> ResetPasswordAsync(ResetPasswordRequestDto request)
+    {
+        var storedToken = await _authRepository.GetPasswordResetTokenAsync(request.Token);
+
+        if (storedToken == null || storedToken.IsUsed || storedToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return ApiResponse<string>.Fail("Invalid or expired reset token.");
+        }
+
+        if (storedToken.User == null)
+        {
+            return ApiResponse<string>.Fail("User account not found.");
+        }
+
+        storedToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        storedToken.User.UpdatedAt = DateTime.UtcNow;
+        storedToken.IsUsed = true;
+
+        await _authRepository.RevokeRefreshTokensForUserAsync(storedToken.UserId);
+        await _authRepository.UpdateUserAsync(storedToken.User);
+        await _authRepository.SaveChangesAsync();
+
+        _logger.LogInformation("Password reset successfully for UserId: {UserId}", storedToken.UserId);
+
+        return ApiResponse<string>.Ok("Password reset successfully. Please log in with your new password.");
     }
 
     public async Task<ApiResponse<string>> UpdatePasswordAsync(Guid userId, UpdatePasswordRequestDto request)
@@ -328,18 +321,7 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Profile updated successfully for user: {Email}", user.Email);
 
-        var userDto = new UserDto
-        {
-            Id = user.Id,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            Role = user.Role,
-            CreatedAt = user.CreatedAt
-        };
-
-        return ApiResponse<UserDto>.Ok(userDto, "Profile updated successfully.");
+        return ApiResponse<UserDto>.Ok(MapUserToDto(user), "Profile updated successfully.");
     }
 
     public async Task<ApiResponse<UserDto>> GetProfileAsync(Guid userId)
@@ -351,17 +333,109 @@ public class AuthService : IAuthService
             return ApiResponse<UserDto>.Fail("User not found.");
         }
 
-        var userDto = new UserDto
+        return ApiResponse<UserDto>.Ok(MapUserToDto(user), "Profile fetched successfully.");
+    }
+
+    public async Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(string refreshToken)
+    {
+        var storedToken = await _authRepository.GetRefreshTokenAsync(refreshToken);
+
+        if (storedToken == null || storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)
         {
-            Id = user.Id,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            Role = user.Role,
-            CreatedAt = user.CreatedAt
+            return ApiResponse<AuthResponseDto>.Fail("Invalid or expired refresh token.");
+        }
+
+        if (storedToken.User == null || !storedToken.User.IsActive)
+        {
+            return ApiResponse<AuthResponseDto>.Fail("User account is not active.");
+        }
+
+        storedToken.IsRevoked = true;
+        var newTokens = await GenerateTokensAsync(storedToken.User);
+
+        _logger.LogInformation("Token refreshed for UserId: {UserId}", storedToken.UserId);
+
+        return ApiResponse<AuthResponseDto>.Ok(newTokens, "Token refreshed successfully.");
+    }
+
+    public async Task<ApiResponse<string>> LogoutAsync(Guid userId)
+    {
+        await _authRepository.RevokeRefreshTokensForUserAsync(userId);
+        await _authRepository.SaveChangesAsync();
+
+        _logger.LogInformation("User logged out, all refresh tokens revoked for UserId: {UserId}", userId);
+
+        return ApiResponse<string>.Ok("Logged out successfully.");
+    }
+
+    public async Task<ApiResponse<List<UserDto>>> GetAllUsersAsync()
+    {
+        var users = await _authRepository.GetAllUsersAsync();
+        var userDtos = users.Select(MapUserToDto).ToList();
+        return ApiResponse<List<UserDto>>.Ok(userDtos, "Users fetched successfully.");
+    }
+
+    public async Task<ApiResponse<UserDto>> SetUserActiveStatusAsync(Guid userId, bool isActive)
+    {
+        var user = await _authRepository.GetByIdAsync(userId);
+
+        if (user == null)
+        {
+            return ApiResponse<UserDto>.Fail("User not found.");
+        }
+
+        user.IsActive = isActive;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _authRepository.UpdateUserAsync(user);
+
+        if (!isActive)
+        {
+            await _authRepository.RevokeRefreshTokensForUserAsync(userId);
+        }
+
+        await _authRepository.SaveChangesAsync();
+
+        _logger.LogInformation("User {UserId} active status set to {IsActive}", userId, isActive);
+
+        return ApiResponse<UserDto>.Ok(MapUserToDto(user), $"User {(isActive ? "activated" : "deactivated")} successfully.");
+    }
+
+    private static UserDto MapUserToDto(User user) => new()
+    {
+        Id = user.Id,
+        FirstName = user.FirstName,
+        LastName = user.LastName,
+        Email = user.Email,
+        PhoneNumber = user.PhoneNumber,
+        ProfileImageUrl = user.ProfileImageUrl,
+        Role = user.Role,
+        IsActive = user.IsActive,
+        CreatedAt = user.CreatedAt
+    };
+
+    private async Task<AuthResponseDto> GenerateTokensAsync(User user)
+    {
+        var accessToken = _jwtTokenService.GenerateAccessToken(user);
+        var refreshTokenString = _jwtTokenService.GenerateRefreshToken();
+
+        var refreshTokenEntity = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenString,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsRevoked = false,
+            CreatedAt = DateTime.UtcNow
         };
 
-        return ApiResponse<UserDto>.Ok(userDto, "Profile fetched successfully.");
+        await _authRepository.AddRefreshTokenAsync(refreshTokenEntity);
+        await _authRepository.SaveChangesAsync();
+
+        return new AuthResponseDto
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshTokenString,
+            User = MapUserToDto(user)
+        };
     }
 }

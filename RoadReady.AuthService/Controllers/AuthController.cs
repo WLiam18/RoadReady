@@ -59,6 +59,14 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
+    {
+        var result = await _authService.ResetPasswordAsync(request);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
     [Authorize]
     [HttpPut("update-password")]
     public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordRequestDto request)
@@ -91,6 +99,43 @@ public class AuthController : ControllerBase
         if (userId == null) return Unauthorized(ApiResponse<string>.Fail("Unauthorized user."));
 
         var result = await _authService.GetProfileAsync(userId.Value);
+        if (!result.Success) return NotFound(result);
+        return Ok(result);
+    }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto request)
+    {
+        var result = await _authService.RefreshTokenAsync(request.RefreshToken);
+        if (!result.Success) return Unauthorized(result);
+        return Ok(result);
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized(ApiResponse<string>.Fail("Unauthorized user."));
+
+        var result = await _authService.LogoutAsync(userId.Value);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("users")]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var result = await _authService.GetAllUsersAsync();
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpPut("users/{userId:guid}/status")]
+    public async Task<IActionResult> UpdateUserStatus(Guid userId, [FromBody] UpdateUserStatusRequestDto request)
+    {
+        var result = await _authService.SetUserActiveStatusAsync(userId, request.IsActive);
         if (!result.Success) return NotFound(result);
         return Ok(result);
     }
