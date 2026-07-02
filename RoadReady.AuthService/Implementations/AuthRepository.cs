@@ -39,6 +39,13 @@ public class AuthRepository : IAuthRepository
         await _context.Users.AddAsync(user);
     }
 
+    public async Task<List<User>> GetAllUsersAsync()
+    {
+        return await _context.Users
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync();
+    }
+
     public Task UpdateUserAsync(User user)
     {
         _context.Users.Update(user);
@@ -48,5 +55,41 @@ public class AuthRepository : IAuthRepository
     public async Task SaveChangesAsync()
     {
         await _context.SaveChangesAsync();
+    }
+
+    public async Task AddRefreshTokenAsync(RefreshToken refreshToken)
+    {
+        await _context.RefreshTokens.AddAsync(refreshToken);
+    }
+
+    public async Task<RefreshToken?> GetRefreshTokenAsync(string token)
+    {
+        return await _context.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == token);
+    }
+
+    public async Task RevokeRefreshTokensForUserAsync(Guid userId)
+    {
+        var tokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.IsRevoked = true;
+        }
+    }
+
+    public async Task AddPasswordResetTokenAsync(PasswordResetToken resetToken)
+    {
+        await _context.PasswordResetTokens.AddAsync(resetToken);
+    }
+
+    public async Task<PasswordResetToken?> GetPasswordResetTokenAsync(string token)
+    {
+        return await _context.PasswordResetTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == token);
     }
 }
