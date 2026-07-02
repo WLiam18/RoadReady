@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using RoadReady.Shared.Enums;
 
 namespace RoadReady.BookingService.Models;
@@ -14,6 +15,12 @@ public class Booking
     public DateTime DropoffDate { get; set; }
     public string PickupLocation { get; set; } = string.Empty;
     public bool IncludesCarSeat { get; set; }
+    public string? AppliedPromoCode { get; set; }
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal DiscountAmount { get; set; }
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal Subtotal { get; set; }
+    [Column(TypeName = "decimal(18,2)")]
     public decimal TotalAmount { get; set; }
     public BookingStatus Status { get; set; } = BookingStatus.PendingPayment;
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

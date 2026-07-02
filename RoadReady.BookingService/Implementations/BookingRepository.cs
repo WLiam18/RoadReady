@@ -50,14 +50,43 @@ public class BookingRepository : IBookingRepository
             .ToListAsync();
     }
 
+    public async Task<List<Payment>> GetPaymentsByUserIdAsync(Guid userId)
+    {
+        return await _context.Payments
+            .Include(p => p.Booking)
+            .Where(p => p.Booking.UserId == userId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<int>> GetUnavailableCarIdsAsync(DateTime pickupDate, DateTime dropoffDate)
+    {
+        return await _context.Bookings
+            .Where(b =>
+                b.Status != BookingStatus.Cancelled &&
+                b.Status != BookingStatus.Completed &&
+                pickupDate < b.DropoffDate &&
+                dropoffDate > b.PickupDate)
+            .Select(b => b.CarId)
+            .Distinct()
+            .ToListAsync();
+    }
+
     public async Task<bool> HasOverlappingBookingAsync(int carId, DateTime pickupDate, DateTime dropoffDate, int? excludeBookingId = null)
     {
         return await _context.Bookings.AnyAsync(b =>
             b.CarId == carId &&
-            b.Status != BookingStatus.Cancelled && 
-            (!excludeBookingId.HasValue || b.Id != excludeBookingId.Value) && 
+            b.Status != BookingStatus.Cancelled &&
+            (!excludeBookingId.HasValue || b.Id != excludeBookingId.Value) &&
             pickupDate < b.DropoffDate &&
             dropoffDate > b.PickupDate);
+    }
+
+    public async Task<Booking?> GetByIdWithPaymentsAsync(int id)
+    {
+        return await _context.Bookings
+            .Include(b => b.Payments)
+            .FirstOrDefaultAsync(x => x.Id == id);
     }
 
     public async Task AddAsync(Booking booking)

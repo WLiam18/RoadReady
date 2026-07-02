@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Razorpay.Api;
 using RoadReady.BookingService.Data;
+using RoadReady.BookingService.Interfaces;
 using RoadReady.Shared.Enums;
-using RoadReady.BookingService.Documents; 
-using QuestPDF.Fluent; 
+using RoadReady.BookingService.Documents;
+using RoadReady.Shared.Email;
+using QuestPDF.Fluent;
 
 namespace RoadReady.BookingService.Controllers;
 
@@ -17,18 +19,24 @@ public class WebhooksController : ControllerBase
     private readonly BookingDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WebhooksController> _logger;
-    private readonly IHttpClientFactory _httpClientFactory; 
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IFileStorageService _fileStorage;
+    private readonly IEmailService _emailService;
 
     public WebhooksController(
-        BookingDbContext context, 
-        IConfiguration configuration, 
+        BookingDbContext context,
+        IConfiguration configuration,
         ILogger<WebhooksController> logger,
-        IHttpClientFactory httpClientFactory) 
+        IHttpClientFactory httpClientFactory,
+        IFileStorageService fileStorage,
+        IEmailService emailService)
     {
         _context = context;
         _configuration = configuration;
         _logger = logger;
-        _httpClientFactory = httpClientFactory; 
+        _httpClientFactory = httpClientFactory;
+        _fileStorage = fileStorage;
+        _emailService = emailService;
     }
 
     [HttpPost("razorpay")]
@@ -69,9 +77,9 @@ public class WebhooksController : ControllerBase
                     if (int.TryParse(bookingIdString, out int bookingId))
                     {
                         var booking = await _context.Bookings
-                            .Include(b => b.Payments) 
+                            .Include(b => b.Payments)
                             .FirstOrDefaultAsync(b => b.Id == bookingId);
-                        
+
                         if (booking != null && booking.Status == BookingStatus.PendingPayment)
                         {
                             var payment = booking.Payments.FirstOrDefault(p => p.Type == PaymentType.InitialCharge);
@@ -85,113 +93,7 @@ public class WebhooksController : ControllerBase
                             await _context.SaveChangesAsync();
                             _logger.LogInformation("Webhook SUCCESS: Booking {BookingId} is now Confirmed and Payment Succeeded.", bookingId);
 
-                            try 
-                            {
-                                var client = _httpClientFactory.CreateClient();
-                                
-                                var carServiceUrl = $"http://localhost:5002/api/v1/cars/{booking.CarId}";
-                                var carResponse = await client.GetAsync(carServiceUrl);
-                                string carName = "Unknown Vehicle";
-
-                                if (carResponse.IsSuccessStatusCode)
-                                {
-                                    var carJson = await carResponse.Content.ReadAsStringAsync();
-                                    using var carDoc = JsonDocument.Parse(carJson);
-                                    var carRoot = carDoc.RootElement;
-                                    
-                                    if (carRoot.TryGetProperty("data", out var dataElement) || carRoot.TryGetProperty("Data", out dataElement))
-                                    {
-                                        if (dataElement.ValueKind == JsonValueKind.Object) carRoot = dataElement;
-                                    }
-
-                                    string make = carRoot.TryGetProperty("make", out var makeProp) || carRoot.TryGetProperty("Make", out makeProp) ? makeProp.GetString() ?? "" : "";
-                                    string model = carRoot.TryGetProperty("model", out var modelProp) || carRoot.TryGetProperty("Model", out modelProp) ? modelProp.GetString() ?? "" : "";
-                                    if (!string.IsNullOrEmpty(make) || !string.IsNullOrEmpty(model)) carName = $"{make} {model}".Trim();
-                                }
-                                else 
-                                {
-                                    _logger.LogWarning("Could not fetch Car Details for CarId {CarId}. Car Service returned {StatusCode}.", booking.CarId, carResponse.StatusCode);
-                                }
-
-                                var authServiceUrl = $"http://localhost:5001/api/v1/auth/users/{booking.UserId}";
-                                var userResponse = await client.GetAsync(authServiceUrl);
-                                
-                                string customerName = "Valued Customer";
-                                string customerEmail = "N/A";
-                                string customerPhone = "N/A";
-
-                                if (userResponse.IsSuccessStatusCode)
-                                {
-                                    var userJson = await userResponse.Content.ReadAsStringAsync();
-                                    using var userDoc = JsonDocument.Parse(userJson);
-                                    var userRoot = userDoc.RootElement;
-                                    
-                                    if (userRoot.TryGetProperty("data", out var userDataElement) || userRoot.TryGetProperty("Data", out userDataElement))
-                                    {
-                                        if (userDataElement.ValueKind == JsonValueKind.Object) userRoot = userDataElement;
-                                    }
-
-                                    string fName = userRoot.TryGetProperty("firstName", out var fn) || userRoot.TryGetProperty("FirstName", out fn) ? fn.GetString() ?? "" : "";
-                                    string lName = userRoot.TryGetProperty("lastName", out var ln) || userRoot.TryGetProperty("LastName", out ln) ? ln.GetString() ?? "" : "";
-                                    
-                                    if (!string.IsNullOrEmpty(fName) || !string.IsNullOrEmpty(lName))
-                                    {
-                                        customerName = $"{fName} {lName}".Trim();
-                                    }
-                                        
-                                    if (userRoot.TryGetProperty("email", out var emailProp) || userRoot.TryGetProperty("Email", out emailProp))
-                                        customerEmail = emailProp.GetString() ?? customerEmail;
-                                        
-                                    if (userRoot.TryGetProperty("phoneNumber", out var phoneProp) || userRoot.TryGetProperty("PhoneNumber", out phoneProp))
-                                        customerPhone = phoneProp.GetString() ?? customerPhone;
-                                }
-                                else
-                                {
-                                    _logger.LogWarning("Could not fetch User Details for UserId {UserId}. User Service returned {StatusCode}.", booking.UserId, userResponse.StatusCode);
-                                }
-
-                                decimal totalPaid = booking.TotalAmount;
-                                decimal subtotal = Math.Round(totalPaid / 1.18m, 2);
-                                decimal taxes = totalPaid - subtotal;
-                                int rentalDays = (booking.DropoffDate - booking.PickupDate).Days;
-                                if (rentalDays == 0) rentalDays = 1;
-
-                                var receiptData = new ReceiptData
-                                {
-                                    BookingReference = $"RR-BKG-{booking.Id}",
-                                    IssueDate = DateTime.UtcNow,
-                                    CustomerName = customerName,
-                                    CustomerEmail = customerEmail,
-                                    CustomerPhone = customerPhone,
-                                    VehicleMakeModel = carName,
-                                    Location = booking.PickupLocation ?? "Main Lot",
-                                    PickupDate = booking.PickupDate,
-                                    DropoffDate = booking.DropoffDate,
-                                    Subtotal = subtotal,
-                                    Taxes = taxes,
-                                    TotalPaid = totalPaid,
-                                    Items = new List<ReceiptItem>
-                                    {
-                                        new ReceiptItem("Vehicle Base Rate", Math.Round(subtotal / rentalDays, 2), rentalDays, "day", subtotal)
-                                    }
-                                };
-
-                                if (booking.IncludesCarSeat)
-                                {
-                                    receiptData.Items.Add(new ReceiptItem("Child Car Seat Add-on", 500.00m, rentalDays, "day", 500.00m * rentalDays));
-                                }
-
-                                var document = new BookingReceiptDocument(receiptData);
-                                byte[] pdfBytes = document.GeneratePdf();
-
-                                System.IO.File.WriteAllBytes($"Receipt_BKG_{booking.Id}.pdf", pdfBytes);
-
-                                _logger.LogInformation("Beautiful Receipt PDF generated successfully for Booking {BookingId}.", bookingId);
-                            }
-                            catch (Exception pdfEx)
-                            {
-                                _logger.LogError(pdfEx, "Failed to generate PDF receipt for Booking {BookingId}.", bookingId);
-                            }
+                            await TryGenerateReceiptAndNotifyAsync(booking);
                         }
                     }
                 }
@@ -203,6 +105,137 @@ public class WebhooksController : ControllerBase
         {
             _logger.LogError(ex, "Razorpay Webhook failed verification or processing.");
             return BadRequest();
+        }
+    }
+
+    private async Task TryGenerateReceiptAndNotifyAsync(Models.Booking booking)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var carServiceUrl = $"{_configuration["Services:CarServiceBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5002"}/api/v1/cars/{booking.CarId}";
+            var carResponse = await client.GetAsync(carServiceUrl);
+            string carName = "Unknown Vehicle";
+
+            if (carResponse.IsSuccessStatusCode)
+            {
+                var carJson = await carResponse.Content.ReadAsStringAsync();
+                using var carDoc = JsonDocument.Parse(carJson);
+                var carRoot = carDoc.RootElement;
+
+                if (carRoot.TryGetProperty("data", out var dataElement) || carRoot.TryGetProperty("Data", out dataElement))
+                {
+                    if (dataElement.ValueKind == JsonValueKind.Object) carRoot = dataElement;
+                }
+
+                string make = carRoot.TryGetProperty("make", out var makeProp) || carRoot.TryGetProperty("Make", out makeProp) ? makeProp.GetString() ?? "" : "";
+                string model = carRoot.TryGetProperty("model", out var modelProp) || carRoot.TryGetProperty("Model", out modelProp) ? modelProp.GetString() ?? "" : "";
+                if (!string.IsNullOrEmpty(make) || !string.IsNullOrEmpty(model)) carName = $"{make} {model}".Trim();
+            }
+            else
+            {
+                _logger.LogWarning("Could not fetch Car Details for CarId {CarId}. Car Service returned {StatusCode}.", booking.CarId, carResponse.StatusCode);
+            }
+
+            var authServiceUrl = $"{_configuration["Services:AuthServiceBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5001"}/api/v1/auth/users/{booking.UserId}";
+            var userResponse = await client.GetAsync(authServiceUrl);
+
+            string customerName = "Valued Customer";
+            string customerEmail = "N/A";
+            string customerPhone = "N/A";
+
+            if (userResponse.IsSuccessStatusCode)
+            {
+                var userJson = await userResponse.Content.ReadAsStringAsync();
+                using var userDoc = JsonDocument.Parse(userJson);
+                var userRoot = userDoc.RootElement;
+
+                if (userRoot.TryGetProperty("data", out var userDataElement) || userRoot.TryGetProperty("Data", out userDataElement))
+                {
+                    if (userDataElement.ValueKind == JsonValueKind.Object) userRoot = userDataElement;
+                }
+
+                string fName = userRoot.TryGetProperty("firstName", out var fn) || userRoot.TryGetProperty("FirstName", out fn) ? fn.GetString() ?? "" : "";
+                string lName = userRoot.TryGetProperty("lastName", out var ln) || userRoot.TryGetProperty("LastName", out ln) ? ln.GetString() ?? "" : "";
+
+                if (!string.IsNullOrEmpty(fName) || !string.IsNullOrEmpty(lName))
+                {
+                    customerName = $"{fName} {lName}".Trim();
+                }
+
+                if (userRoot.TryGetProperty("email", out var emailProp) || userRoot.TryGetProperty("Email", out emailProp))
+                    customerEmail = emailProp.GetString() ?? customerEmail;
+
+                if (userRoot.TryGetProperty("phoneNumber", out var phoneProp) || userRoot.TryGetProperty("PhoneNumber", out phoneProp))
+                    customerPhone = phoneProp.GetString() ?? customerPhone;
+            }
+            else
+            {
+                _logger.LogWarning("Could not fetch User Details for UserId {UserId}. User Service returned {StatusCode}.", booking.UserId, userResponse.StatusCode);
+            }
+
+            decimal totalPaid = booking.TotalAmount;
+            decimal subtotal = Math.Round(totalPaid / 1.18m, 2);
+            decimal taxes = totalPaid - subtotal;
+            int rentalDays = (booking.DropoffDate - booking.PickupDate).Days;
+            if (rentalDays == 0) rentalDays = 1;
+
+            var receiptData = new ReceiptData
+            {
+                BookingReference = $"RR-BKG-{booking.Id}",
+                IssueDate = DateTime.UtcNow,
+                CustomerName = customerName,
+                CustomerEmail = customerEmail,
+                CustomerPhone = customerPhone,
+                VehicleMakeModel = carName,
+                Location = booking.PickupLocation ?? "Main Lot",
+                PickupDate = booking.PickupDate,
+                DropoffDate = booking.DropoffDate,
+                Subtotal = subtotal,
+                Taxes = taxes,
+                TotalPaid = totalPaid,
+                Items = new List<ReceiptItem>
+                {
+                    new ReceiptItem("Vehicle Base Rate", Math.Round(subtotal / rentalDays, 2), rentalDays, "day", subtotal)
+                }
+            };
+
+            if (booking.IncludesCarSeat)
+            {
+                receiptData.Items.Add(new ReceiptItem("Child Car Seat Add-on", 500.00m, rentalDays, "day", 500.00m * rentalDays));
+            }
+
+            var document = new BookingReceiptDocument(receiptData);
+            byte[] pdfBytes = document.GeneratePdf();
+
+            var safeBookingRef = $"RR-BKG-{booking.Id}";
+            var receiptUrl = await _fileStorage.SaveBytesAsync(pdfBytes, "receipts", $"{safeBookingRef}.pdf");
+
+            var initialPayment = booking.Payments.FirstOrDefault(p => p.Type == PaymentType.InitialCharge);
+            if (initialPayment != null)
+            {
+                initialPayment.ReceiptUrl = receiptUrl;
+                await _context.SaveChangesAsync();
+            }
+
+            _logger.LogInformation("PDF receipt generated and saved at {ReceiptUrl} for Booking {BookingId}.", receiptUrl, booking.Id);
+
+            if (!string.IsNullOrEmpty(customerEmail) && customerEmail != "N/A")
+            {
+                var baseUrl = _configuration["Receipts:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5003";
+                var fullyQualifiedUrl = $"{baseUrl}{receiptUrl}";
+                await _emailService.SendPaymentReceiptAsync(
+                    customerEmail,
+                    customerName,
+                    booking.Id,
+                    carName,
+                    booking.TotalAmount,
+                    fullyQualifiedUrl);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate/email PDF receipt for Booking {BookingId}.", booking.Id);
         }
     }
 }

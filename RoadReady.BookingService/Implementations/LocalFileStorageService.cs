@@ -57,4 +57,32 @@ public class LocalFileStorageService : IFileStorageService
 
         return savedPaths;
     }
+
+    public async Task<string> SaveBytesAsync(byte[] bytes, string folderName, string fileName)
+    {
+        var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", folderName);
+
+        if (!Directory.Exists(uploadsFolder))
+        {
+            Directory.CreateDirectory(uploadsFolder);
+        }
+
+        var filePath = Path.Combine(uploadsFolder, fileName);
+        await File.WriteAllBytesAsync(filePath, bytes);
+
+        return $"/uploads/{folderName}/{fileName}";
+    }
+
+    public async Task<byte[]?> ReadFileAsync(string relativePath)
+    {
+        var webRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        var filePath = Path.Combine(webRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        return await File.ReadAllBytesAsync(filePath);
+    }
 }

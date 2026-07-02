@@ -2,12 +2,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
-using Razorpay.Api; 
+using Razorpay.Api;
 using RoadReady.BookingService.Interfaces;
 using RoadReady.BookingService.Models;
 using RoadReady.Shared.DTOs.Booking;
 using RoadReady.Shared.DTOs.Car;
 using RoadReady.Shared.DTOs.Admin;
+using RoadReady.Shared.DTOs.Payment;
+using RoadReady.Shared.Email;
 using RoadReady.Shared.Enums;
 using RoadReady.Shared.Responses;
 
@@ -18,18 +20,21 @@ public class BookingService : IBookingService
     private readonly IBookingRepository _bookingRepository;
     private readonly HttpClient _httpClient;
     private readonly ILogger<BookingService> _logger;
-    private readonly IConfiguration _configuration; 
+    private readonly IConfiguration _configuration;
+    private readonly IEmailService _emailService;
 
     public BookingService(
-        IBookingRepository bookingRepository, 
-        HttpClient httpClient, 
+        IBookingRepository bookingRepository,
+        HttpClient httpClient,
         ILogger<BookingService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IEmailService emailService)
     {
         _bookingRepository = bookingRepository;
         _httpClient = httpClient;
         _logger = logger;
         _configuration = configuration;
+        _emailService = emailService;
     }
 
     public async Task<ApiResponse<BookingDto>> CreateAsync(Guid userId, CreateBookingRequestDto request)
@@ -57,6 +62,23 @@ public class BookingService : IBookingService
             request.DropoffDate,
             request.IncludesCarSeat);
 
+        var pickupDateTime = CombineDateAndTime(request.PickupDate, request.PickupTime);
+        var dropoffDateTime = CombineDateAndTime(request.DropoffDate, request.DropoffTime);
+
+        decimal discountAmount = 0m;
+        string? appliedPromo = null;
+        if (!string.IsNullOrWhiteSpace(request.PromoCode))
+        {
+            var promoResult = await TryApplyPromoCodeAsync(request.PromoCode, totalAmount);
+            if (promoResult.HasValue)
+            {
+                discountAmount = promoResult.Value.Discount;
+                appliedPromo = promoResult.Value.Code;
+            }
+        }
+
+        var finalAmount = Math.Max(0, totalAmount - discountAmount);
+
         var booking = new Booking
         {
             UserId = userId,
@@ -64,12 +86,15 @@ public class BookingService : IBookingService
             CarMake = carResult.Make,
             CarModel = carResult.Model,
             CarImageUrl = carResult.ImageUrls.FirstOrDefault() ?? string.Empty,
-            PickupDate = request.PickupDate,
-            DropoffDate = request.DropoffDate,
+            PickupDate = pickupDateTime,
+            DropoffDate = dropoffDateTime,
             PickupLocation = request.PickupLocation,
             IncludesCarSeat = request.IncludesCarSeat,
-            TotalAmount = totalAmount,
-            Status = BookingStatus.PendingPayment 
+            AppliedPromoCode = appliedPromo,
+            Subtotal = totalAmount,
+            DiscountAmount = discountAmount,
+            TotalAmount = finalAmount,
+            Status = BookingStatus.PendingPayment
         };
 
         await _bookingRepository.AddAsync(booking);
@@ -112,6 +137,8 @@ public class BookingService : IBookingService
             await _bookingRepository.SaveAsync();
             
             _logger.LogInformation("Razorpay Link created for BookingId: {BookingId}", booking.Id);
+
+            await SendBookingConfirmationEmailAsync(booking, payment.PaymentUrl);
         }
         catch (Exception ex)
         {
@@ -140,6 +167,16 @@ public class BookingService : IBookingService
     return ApiResponse<bool>.Ok(true, "User is eligible to review.");
     }
 
+    public async Task<List<int>> GetUnavailableCarIdsAsync(DateTime pickupDate, DateTime dropoffDate)
+    {
+        return await _bookingRepository.GetUnavailableCarIdsAsync(pickupDate, dropoffDate);
+    }
+
+    public Task<Booking?> GetByIdForReceiptAsync(int id)
+    {
+        return _bookingRepository.GetByIdWithPaymentsAsync(id);
+    }
+
     public async Task<ApiResponse<BookingDto>> GetByIdAsync(int id, Guid currentUserId, bool isAdmin)
     {
         var booking = await _bookingRepository.GetByIdAsync(id);
@@ -156,6 +193,25 @@ public class BookingService : IBookingService
     {
         var bookings = await _bookingRepository.GetByUserIdAsync(userId);
         return ApiResponse<List<BookingDto>>.Ok(bookings.Select(MapToDto).ToList(), "User bookings fetched successfully.");
+    }
+
+    public async Task<ApiResponse<List<PaymentDto>>> GetPaymentsByUserIdAsync(Guid userId)
+    {
+        var payments = await _bookingRepository.GetPaymentsByUserIdAsync(userId);
+
+        var paymentDtos = payments.Select(p => new PaymentDto
+        {
+            Id = p.Id,
+            BookingId = p.BookingId,
+            UserId = p.Booking?.UserId ?? Guid.Empty,
+            Amount = p.Amount,
+            Type = p.Type,
+            Status = p.Status,
+            PaymentUrl = p.PaymentUrl,
+            CreatedAt = p.CreatedAt
+        }).ToList();
+
+        return ApiResponse<List<PaymentDto>>.Ok(paymentDtos, "Payment history fetched successfully.");
     }
 
     public async Task<ApiResponse<BookingDto>> CancelAsync(int id, Guid currentUserId, bool isAdmin)
@@ -213,6 +269,8 @@ public class BookingService : IBookingService
 
         await _bookingRepository.UpdateAsync(booking);
         await _bookingRepository.SaveAsync();
+
+        await SendBookingCancellationEmailAsync(booking);
 
         return ApiResponse<BookingDto>.Ok(MapToDto(booking), "Booking cancelled successfully.");
     }
@@ -322,6 +380,72 @@ public class BookingService : IBookingService
         return (pricePerDay * totalDays) + extraCharge;
     }
 
+    private static DateTime CombineDateAndTime(DateTime date, string time) => DateTimeCombiner.Combine(date, time);
+
+    private async Task<(string Email, string Name)?> FetchUserInfoAsync(Guid userId)
+    {
+        try
+        {
+            var url = $"{_configuration["Services:AuthServiceBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5001"}/api/v1/auth/users/{userId}";
+            var response = await _httpClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var root = doc.RootElement;
+            if (root.TryGetProperty("data", out var dataElement) ||
+                root.TryGetProperty("Data", out dataElement))
+            {
+                if (dataElement.ValueKind == JsonValueKind.Object) root = dataElement;
+            }
+            var email = root.TryGetProperty("email", out var e) || root.TryGetProperty("Email", out e)
+                ? e.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(email)) return null;
+
+            string fName = root.TryGetProperty("firstName", out var fn) || root.TryGetProperty("FirstName", out fn) ? fn.GetString() ?? "" : "";
+            string lName = root.TryGetProperty("lastName", out var ln) || root.TryGetProperty("LastName", out ln) ? ln.GetString() ?? "" : "";
+            var name = $"{fName} {lName}".Trim();
+            return (email, string.IsNullOrEmpty(name) ? email : name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch user info for UserId: {UserId}", userId);
+            return null;
+        }
+    }
+
+    private async Task SendBookingConfirmationEmailAsync(Booking booking, string paymentUrl)
+    {
+        var user = await FetchUserInfoAsync(booking.UserId);
+        if (user == null) return;
+
+        await _emailService.SendBookingConfirmationAsync(
+            user.Value.Email,
+            user.Value.Name,
+            booking.Id,
+            $"{booking.CarMake} {booking.CarModel}".Trim(),
+            booking.PickupDate,
+            booking.DropoffDate,
+            booking.TotalAmount,
+            paymentUrl);
+    }
+
+    private async Task SendBookingCancellationEmailAsync(Booking booking)
+    {
+        var user = await FetchUserInfoAsync(booking.UserId);
+        if (user == null) return;
+
+        decimal refundAmount = booking.Payments?
+            .Where(p => p.Type == PaymentType.Refund && p.Status == PaymentStatus.Succeeded)
+            .Sum(p => p.Amount) ?? 0m;
+
+        await _emailService.SendBookingCancellationAsync(
+            user.Value.Email,
+            user.Value.Name,
+            booking.Id,
+            $"{booking.CarMake} {booking.CarModel}".Trim(),
+            refundAmount);
+    }
+
     private static BookingDto MapToDto(Booking booking)
     {
         var initialPayment = booking.Payments?.FirstOrDefault(p => p.Type == PaymentType.InitialCharge);
@@ -338,11 +462,73 @@ public class BookingService : IBookingService
             DropoffDate = booking.DropoffDate,
             PickupLocation = booking.PickupLocation,
             IncludesCarSeat = booking.IncludesCarSeat,
+            AppliedPromoCode = booking.AppliedPromoCode,
+            Subtotal = booking.Subtotal,
+            DiscountAmount = booking.DiscountAmount,
             TotalAmount = booking.TotalAmount,
             Status = booking.Status,
-            PaymentUrl = initialPayment?.PaymentUrl ?? string.Empty, 
+            PaymentUrl = initialPayment?.PaymentUrl ?? string.Empty,
             PaymentStatus = initialPayment?.Status.ToString() ?? "Pending",
+            ReceiptUrl = initialPayment?.ReceiptUrl,
             CreatedAt = booking.CreatedAt
         };
+    }
+
+    private async Task<(string Code, decimal Discount)?> TryApplyPromoCodeAsync(string code, decimal subtotal)
+    {
+        try
+        {
+            var promoUrl = $"{_configuration["Services:CarServiceBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5002"}/api/v1/promo-codes/validate";
+            var request = new ValidatePromoHttpRequest { Code = code, BookingAmount = subtotal };
+            var response = await _httpClient.PostAsJsonAsync(promoUrl, request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Promo code validation returned {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<ApiResponse<ValidatePromoResponse>>();
+            if (result?.Data == null || !result.Data.IsValid)
+            {
+                _logger.LogInformation("Promo code {Code} invalid: {Message}", code, result?.Data?.Message ?? "unknown");
+                return null;
+            }
+
+            _logger.LogInformation("Applied promo {Code}. Discount {Discount}", result.Data.Code, result.Data.DiscountAmount);
+            return (result.Data.Code, result.Data.DiscountAmount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to validate promo code {Code}", code);
+            return null;
+        }
+    }
+}
+
+internal record ValidatePromoHttpRequest
+{
+    public string Code { get; init; } = string.Empty;
+    public decimal BookingAmount { get; init; }
+}
+
+internal class ValidatePromoResponse
+{
+    public bool IsValid { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public decimal DiscountAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+internal static class DateTimeCombiner
+{
+    public static DateTime Combine(DateTime date, string time)
+    {
+        if (TimeSpan.TryParse(time, out var ts))
+        {
+            return date.Date + ts;
+        }
+        return date;
     }
 }
