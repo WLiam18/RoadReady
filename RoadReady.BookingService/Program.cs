@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Log4Net.AspNetCore;
 using Microsoft.IdentityModel.Tokens;
@@ -12,6 +14,7 @@ using RoadReady.BookingService.Implementations;
 using RoadReady.BookingService.Interfaces;
 using RoadReady.BookingService.Middleware;
 using RoadReady.BookingService.Validators;
+using RoadReady.Shared.Email;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +77,34 @@ builder.Services.AddHttpClient<IBookingService, BookingService>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:CarServiceBaseUrl"]!);
 });
 
+builder.Services.AddRoadReadyEmail(builder.Configuration);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var key = httpContext.User.Identity?.Name
+                  ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                  ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 100,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.ContentType = "application/json";
+        await ctx.HttpContext.Response.WriteAsync(
+            "{\"success\":false,\"message\":\"Too many requests. Please slow down and try again shortly.\",\"data\":null}",
+            ct);
+    };
+});
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -117,11 +148,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowReactApp");
+app.UseRateLimiter();
 
-app.UseStaticFiles(); 
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "booking", timestamp = DateTime.UtcNow }));
 
 app.MapControllers();
 
