@@ -19,9 +19,9 @@ public class BrandsController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
-        var result = await _brandService.GetAllAsync();
+        var result = await _brandService.GetAllAsync(page, pageSize);
         return Ok(result);
     }
 

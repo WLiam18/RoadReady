@@ -47,4 +47,42 @@ public class ReviewsController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPut("{reviewId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateReview(int carId, Guid reviewId, [FromBody] UpdateReviewRequestDto request)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { Success = false, Message = "Invalid user token." });
+        }
+
+        var result = await _reviewService.UpdateReviewAsync(reviewId, userId, request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpDelete("{reviewId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteReview(int carId, Guid reviewId)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { Success = false, Message = "Invalid user token." });
+        }
+
+        var result = await _reviewService.DeleteReviewAsync(reviewId, userId);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
 }

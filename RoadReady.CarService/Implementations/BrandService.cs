@@ -16,13 +16,19 @@ public class BrandService : IBrandService
         _logger = logger;
     }
 
-    public async Task<ApiResponse<List<BrandDto>>> GetAllAsync()
+    public async Task<PagedResponse<BrandDto>> GetAllAsync(int page = 1, int pageSize = 20)
     {
         var brands = await _brandRepository.GetAllAsync();
 
-        var brandDtos = brands.Select(MapBrandToDto).ToList();
+        var totalCount = brands.Count;
 
-        return ApiResponse<List<BrandDto>>.Ok(brandDtos, "Brands fetched successfully.");
+        var pagedBrands = brands
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapBrandToDto)
+            .ToList();
+
+        return PagedResponse<BrandDto>.Create(pagedBrands, page, pageSize, totalCount);
     }
 
     public async Task<ApiResponse<BrandDto>> GetByIdAsync(int id)

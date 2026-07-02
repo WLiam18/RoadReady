@@ -28,9 +28,26 @@ public class ReviewRepository : IReviewRepository
             .ToListAsync();
     }
 
+    public async Task<Review?> GetReviewByIdAsync(Guid reviewId)
+    {
+        return await _context.Reviews.FirstOrDefaultAsync(r => r.Id == reviewId);
+    }
+
     public async Task<bool> HasUserReviewedCarAsync(int carId, Guid userId)
     {
         return await _context.Reviews.AnyAsync(r => r.CarId == carId && r.UserId == userId);
+    }
+
+    public Task UpdateReviewAsync(Review review)
+    {
+        _context.Reviews.Update(review);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteReviewAsync(Review review)
+    {
+        _context.Reviews.Remove(review);
+        return Task.CompletedTask;
     }
 
     public async Task SaveChangesAsync()
