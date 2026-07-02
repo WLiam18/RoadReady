@@ -18,6 +18,7 @@ public class CarRepository : ICarRepository
     {
         return await _context.Cars
             .Include(c => c.Brand)
+            .Include(c => c.Reviews)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
     }
@@ -26,13 +27,15 @@ public class CarRepository : ICarRepository
     {
         return await _context.Cars
             .Include(c => c.Brand)
+            .Include(c => c.Reviews)
             .FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    public async Task<List<Car>> SearchAsync(string? location, string? make, string? model)
+    public async Task<List<Car>> SearchAsync(string? location, string? make, string? model, decimal? minPrice, decimal? maxPrice, string? transmission, string? fuelType, int? seatingCapacity)
     {
         var query = _context.Cars
             .Include(c => c.Brand)
+            .Include(c => c.Reviews)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(location))
@@ -48,6 +51,31 @@ public class CarRepository : ICarRepository
         if (!string.IsNullOrWhiteSpace(model))
         {
             query = query.Where(c => c.Model.Contains(model));
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(c => c.PricePerDay >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            query = query.Where(c => c.PricePerDay <= maxPrice.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(transmission))
+        {
+            query = query.Where(c => c.Transmission == transmission);
+        }
+
+        if (!string.IsNullOrWhiteSpace(fuelType))
+        {
+            query = query.Where(c => c.FuelType == fuelType);
+        }
+
+        if (seatingCapacity.HasValue)
+        {
+            query = query.Where(c => c.SeatingCapacity >= seatingCapacity.Value);
         }
 
         return await query

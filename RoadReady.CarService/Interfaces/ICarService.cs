@@ -5,7 +5,7 @@ namespace RoadReady.CarService.Interfaces;
 
 public interface ICarService
 {
-    Task<ApiResponse<List<CarDto>>> GetAllAsync();
+    Task<PagedResponse<CarDto>> GetAllAsync(int page = 1, int pageSize = 10);
     Task<ApiResponse<CarDto>> GetByIdAsync(int id);
     Task<PagedResponse<CarDto>> SearchAsync(CarSearchRequestDto request);
     Task<ApiResponse<CarDto>> CreateAsync(CreateCarRequestDto request);

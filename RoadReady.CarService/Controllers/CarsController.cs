@@ -11,17 +11,19 @@ namespace RoadReady.CarService.Controllers;
 public class CarsController : ControllerBase
 {
     private readonly ICarService _carService;
+    private readonly IWebHostEnvironment _environment;
 
-    public CarsController(ICarService carService)
+    public CarsController(ICarService carService, IWebHostEnvironment environment)
     {
         _carService = carService;
+        _environment = environment;
     }
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var result = await _carService.GetAllAsync();
+        var result = await _carService.GetAllAsync(page, pageSize);
         return Ok(result);
     }
 
@@ -59,6 +61,39 @@ public class CarsController : ControllerBase
         }
 
         return StatusCode(201, result);
+    }
+
+    [HttpPost("upload")]
+    [Authorize(Roles = nameof(UserRole.Admin))]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadImage(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { Success = false, Message = "No file provided." });
+        }
+
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension))
+        {
+            return BadRequest(new { Success = false, Message = "Only JPG, PNG, and WEBP images are allowed." });
+        }
+
+        var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "cars");
+        Directory.CreateDirectory(uploadsFolder);
+
+        var uniqueFileName = $"{Guid.NewGuid()}{extension}";
+        var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var url = $"/uploads/cars/{uniqueFileName}";
+
+        return Ok(new { Success = true, Data = url, Message = "Image uploaded successfully." });
     }
 
     [HttpPut("{id:int}")]

@@ -10,21 +10,36 @@ public class CarService : ICarService
     private readonly ICarRepository _carRepository;
     private readonly IBrandRepository _brandRepository;
     private readonly ILogger<CarService> _logger;
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
 
-    public CarService(ICarRepository carRepository, IBrandRepository brandRepository, ILogger<CarService> logger)
+    public CarService(
+        ICarRepository carRepository, 
+        IBrandRepository brandRepository, 
+        ILogger<CarService> logger,
+        HttpClient httpClient,
+        IConfiguration configuration)
     {
         _carRepository = carRepository;
         _brandRepository = brandRepository;
         _logger = logger;
+        _httpClient = httpClient;
+        _configuration = configuration;
     }
 
-    public async Task<ApiResponse<List<CarDto>>> GetAllAsync()
+    public async Task<PagedResponse<CarDto>> GetAllAsync(int page = 1, int pageSize = 10)
     {
         var cars = await _carRepository.GetAllAsync();
 
-        var carDtos = cars.Select(MapCarToDto).ToList();
+        var totalCount = cars.Count;
 
-        return ApiResponse<List<CarDto>>.Ok(carDtos, "Cars fetched successfully.");
+        var pagedCars = cars
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapCarToDto)
+            .ToList();
+
+        return PagedResponse<CarDto>.Create(pagedCars, page, pageSize, totalCount);
     }
 
     public async Task<ApiResponse<CarDto>> GetByIdAsync(int id)
@@ -41,7 +56,34 @@ public class CarService : ICarService
 
     public async Task<PagedResponse<CarDto>> SearchAsync(CarSearchRequestDto request)
     {
-        var cars = await _carRepository.SearchAsync(request.Location, request.Make, request.Model);
+        var cars = await _carRepository.SearchAsync(
+            request.Location, request.Make, request.Model,
+            request.MinPrice, request.MaxPrice,
+            request.Transmission, request.FuelType,
+            request.SeatingCapacity);
+
+        if (request.PickupDate.HasValue && request.DropoffDate.HasValue)
+        {
+            try
+            {
+                var bookingServiceUrl = _configuration["Services:BookingServiceBaseUrl"] ?? "http://localhost:5003";
+                var verifyUrl = $"{bookingServiceUrl.TrimEnd('/')}/api/v1/bookings/unavailable-car-ids?pickupDate={request.PickupDate:O}&dropoffDate={request.DropoffDate:O}";
+                var httpResponse = await _httpClient.GetAsync(verifyUrl);
+
+                if (httpResponse.IsSuccessStatusCode)
+                {
+                    var unavailableCarIds = await httpResponse.Content.ReadFromJsonAsync<List<int>>();
+                    if (unavailableCarIds != null)
+                    {
+                        cars = cars.Where(c => !unavailableCarIds.Contains(c.Id)).ToList();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch unavailable car IDs from BookingService.");
+            }
+        }
 
         var totalCount = cars.Count;
 
@@ -175,7 +217,10 @@ public class CarService : ICarService
             Status = car.Status,
             BrandId = car.BrandId,
             BrandName = car.Brand?.Name ?? string.Empty,
-            AverageRating = 0
+            AverageRating = car.Reviews != null && car.Reviews.Count != 0
+                ? Math.Round(car.Reviews.Average(r => r.Rating), 1)
+                : 0,
+            ReviewCount = car.Reviews?.Count ?? 0
         };
     }
 }
