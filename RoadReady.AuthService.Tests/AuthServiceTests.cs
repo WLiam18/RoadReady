@@ -7,6 +7,7 @@ using RoadReady.AuthService.Implementations;
 using RoadReady.AuthService.Interfaces;
 using RoadReady.AuthService.Models;
 using RoadReady.Shared.DTOs.Auth;
+using RoadReady.Shared.Email;
 using RoadReady.Shared.Enums;
 
 namespace RoadReady.AuthService.Tests;
@@ -18,6 +19,7 @@ public class AuthServiceTests
     private Mock<IJwtTokenService> _mockJwtTokenService;
     private Mock<ILogger<Implementations.AuthService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
+    private Mock<IEmailService> _mockEmailService;
     
     private Implementations.AuthService _authService;
 
@@ -28,12 +30,19 @@ public class AuthServiceTests
         _mockJwtTokenService = new Mock<IJwtTokenService>();
         _mockLogger = new Mock<ILogger<Implementations.AuthService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _mockEmailService = new Mock<IEmailService>();
+
+        _mockEmailService.Setup(e => e.SendWelcomeAsync(It.IsAny<string>(), It.IsAny<string>()))
+                         .ReturnsAsync(true);
+        _mockEmailService.Setup(e => e.SendPasswordResetLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+                         .ReturnsAsync(true);
 
         _authService = new Implementations.AuthService(
             _mockAuthRepository.Object,
             _mockJwtTokenService.Object,
             _mockLogger.Object,
-            _mockConfiguration.Object
+            _mockConfiguration.Object,
+            _mockEmailService.Object
         );
     }
 
@@ -52,8 +61,12 @@ public class AuthServiceTests
         _mockAuthRepository.Setup(repo => repo.GetByEmailAsync(It.IsAny<string>()))
                            .ReturnsAsync((User?)null);
 
-        _mockJwtTokenService.Setup(jwt => jwt.GenerateToken(It.IsAny<User>()))
+        _mockJwtTokenService.Setup(jwt => jwt.GenerateAccessToken(It.IsAny<User>()))
                             .Returns("mocked-jwt-token");
+        _mockJwtTokenService.Setup(jwt => jwt.GenerateRefreshToken())
+                            .Returns("mocked-refresh-token");
+        _mockAuthRepository.Setup(repo => repo.AddRefreshTokenAsync(It.IsAny<RoadReady.AuthService.Models.RefreshToken>()))
+                           .Returns(Task.CompletedTask);
 
         var result = await _authService.RegisterAsync(request);
 
@@ -64,7 +77,8 @@ public class AuthServiceTests
         Assert.That(result.Data.User.Email, Is.EqualTo("new@roadready.com"));
         
         _mockAuthRepository.Verify(repo => repo.AddUserAsync(It.IsAny<User>()), Times.Once);
-        _mockAuthRepository.Verify(repo => repo.SaveChangesAsync(), Times.Once);
+        _mockAuthRepository.Verify(repo => repo.AddRefreshTokenAsync(It.IsAny<RoadReady.AuthService.Models.RefreshToken>()), Times.Once);
+        _mockAuthRepository.Verify(repo => repo.SaveChangesAsync(), Times.Exactly(2));
     }
 
     [Test]
@@ -111,8 +125,12 @@ public class AuthServiceTests
         _mockAuthRepository.Setup(repo => repo.GetByEmailAsync("valid@roadready.com"))
                            .ReturnsAsync(validUser);
 
-        _mockJwtTokenService.Setup(jwt => jwt.GenerateToken(validUser))
+        _mockJwtTokenService.Setup(jwt => jwt.GenerateAccessToken(validUser))
                             .Returns("mocked-jwt-token");
+        _mockJwtTokenService.Setup(jwt => jwt.GenerateRefreshToken())
+                            .Returns("mocked-refresh-token");
+        _mockAuthRepository.Setup(repo => repo.AddRefreshTokenAsync(It.IsAny<RoadReady.AuthService.Models.RefreshToken>()))
+                           .Returns(Task.CompletedTask);
 
         var result = await _authService.LoginAsync(request);
 

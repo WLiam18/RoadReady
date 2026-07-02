@@ -11,6 +11,7 @@ using RoadReady.BookingService.Models;
 using RoadReady.Shared.DTOs.Admin;
 using RoadReady.Shared.DTOs.Booking;
 using RoadReady.Shared.DTOs.Car;
+using RoadReady.Shared.Email;
 using RoadReady.Shared.Enums;
 using RoadReady.Shared.Responses;
 
@@ -23,6 +24,7 @@ public class BookingServiceTests
     private Mock<HttpMessageHandler> _mockHttpMessageHandler;
     private Mock<ILogger<Implementations.BookingService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
+    private Mock<IEmailService> _mockEmailService;
     
     private HttpClient _httpClient;
     private Implementations.BookingService _bookingService;
@@ -34,6 +36,7 @@ public class BookingServiceTests
         _mockHttpMessageHandler = new Mock<HttpMessageHandler>();
         _mockLogger = new Mock<ILogger<Implementations.BookingService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _mockEmailService = new Mock<IEmailService>();
 
         _mockConfiguration.Setup(c => c["Razorpay:KeyId"]).Returns("test_key_id");
         _mockConfiguration.Setup(c => c["Razorpay:KeySecret"]).Returns("test_key_secret");
@@ -43,11 +46,17 @@ public class BookingServiceTests
             BaseAddress = new Uri("http://localhost:5002/")
         };
 
+        _mockEmailService.Setup(e => e.SendBookingConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<decimal>(), It.IsAny<string>()))
+                         .ReturnsAsync(true);
+        _mockEmailService.Setup(e => e.SendBookingCancellationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<decimal>()))
+                         .ReturnsAsync(true);
+
         _bookingService = new Implementations.BookingService(
             _mockRepo.Object,
             _httpClient,
             _mockLogger.Object,
-            _mockConfiguration.Object
+            _mockConfiguration.Object,
+            _mockEmailService.Object
         );
     }
 
@@ -61,11 +70,13 @@ public class BookingServiceTests
     [TestCase(-2)]
     public async Task CreateAsync_WhenDatesAreInvalid_ReturnsFail(int daysToAdd)
     {
+        var pickupDate = new DateTime(2026, 7, 1);
+
         var request = new CreateBookingRequestDto
         {
             CarId = 1,
-            PickupDate = DateTime.UtcNow.AddDays(1),
-            DropoffDate = DateTime.UtcNow.AddDays(1).AddDays(daysToAdd)
+            PickupDate = pickupDate,
+            DropoffDate = daysToAdd == 0 ? pickupDate : pickupDate.AddDays(daysToAdd)
         };
 
         var result = await _bookingService.CreateAsync(Guid.NewGuid(), request);

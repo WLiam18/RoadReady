@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
@@ -9,6 +10,7 @@ using RoadReady.CarService.Interfaces;
 using RoadReady.CarService.Models;
 using RoadReady.Shared.DTOs.Car;
 using RoadReady.Shared.Enums;
+using System.Net.Http;
 
 namespace RoadReady.CarService.Tests;
 
@@ -18,6 +20,8 @@ public class CarServiceTests
     private Mock<ICarRepository> _mockCarRepository;
     private Mock<IBrandRepository> _mockBrandRepository;
     private Mock<ILogger<Implementations.CarService>> _mockLogger;
+    private HttpClient _httpClient;
+    private IConfiguration _configuration;
     
     private Implementations.CarService _carService;
 
@@ -27,12 +31,25 @@ public class CarServiceTests
         _mockCarRepository = new Mock<ICarRepository>();
         _mockBrandRepository = new Mock<IBrandRepository>();
         _mockLogger = new Mock<ILogger<Implementations.CarService>>();
+        _httpClient = new HttpClient();
+        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            { "Services:BookingServiceBaseUrl", "http://localhost:5003" }
+        }).Build();
 
         _carService = new Implementations.CarService(
             _mockCarRepository.Object,
             _mockBrandRepository.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            _httpClient,
+            _configuration
         );
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _httpClient?.Dispose();
     }
 
     [Test]
@@ -181,7 +198,7 @@ public class CarServiceTests
 
         var filteredCars = allMockCars.Where(c => c.Location.Contains(location)).ToList();
 
-        _mockCarRepository.Setup(repo => repo.SearchAsync(location, null, null))
+        _mockCarRepository.Setup(repo => repo.SearchAsync(location, null, null, null, null, null, null, null))
                           .ReturnsAsync(filteredCars);
 
         var result = await _carService.SearchAsync(searchRequest);
