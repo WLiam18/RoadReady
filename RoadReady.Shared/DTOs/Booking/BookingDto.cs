@@ -14,12 +14,16 @@ public class BookingDto
     public DateTime DropoffDate { get; set; }
     public string PickupLocation { get; set; } = string.Empty;
     public bool IncludesCarSeat { get; set; }
+    public string? AppliedPromoCode { get; set; }
+    public decimal Subtotal { get; set; }
+    public decimal DiscountAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public BookingStatus Status { get; set; }
-    
-    // NEW: Expose these to the response so you can click the link!
+
     public string PaymentUrl { get; set; } = string.Empty;
     public string PaymentStatus { get; set; } = string.Empty;
+
+    public string? ReceiptUrl { get; set; }
 
     public DateTime CreatedAt { get; set; }
 }

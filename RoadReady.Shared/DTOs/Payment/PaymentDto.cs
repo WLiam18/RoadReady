@@ -8,9 +8,8 @@ public class PaymentDto
     public int BookingId { get; set; }
     public Guid UserId { get; set; }
     public decimal Amount { get; set; }
-    public string Currency { get; set; } = "inr";
-    public string PaymentMethod { get; set; } = string.Empty;
-    public string StripePaymentIntentId { get; set; } = string.Empty;
+    public PaymentType Type { get; set; }
     public PaymentStatus Status { get; set; }
+    public string? PaymentUrl { get; set; }
     public DateTime CreatedAt { get; set; }
 }

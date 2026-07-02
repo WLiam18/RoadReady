@@ -21,4 +21,5 @@ public class CarDto
     public int BrandId { get; set; }
     public string BrandName { get; set; } = string.Empty;
     public double AverageRating { get; set; }
+    public int ReviewCount { get; set; }
 }
