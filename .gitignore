@@ -1,0 +1,32 @@
+## Standard .NET / Visual Studio gitignore
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.swp
+
+
+## Secrets: never commit these
+appsettings.*.Production.json
+appsettings.Local.json
+appsettings.Development.json
+secrets.json
+
+## Node / frontend
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+
+## OS
+.DS_Store
+Thumbs.db
+
+
+## Logs
+*.log
+logs/
