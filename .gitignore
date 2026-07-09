@@ -30,3 +30,7 @@ Thumbs.db
 ## Logs
 *.log
 logs/
+
+
+RoadReady.BookingService/wwwroot/uploads/
+RoadReady.CarService/wwwroot/
