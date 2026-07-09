@@ -1,0 +1,13 @@
+<!-- Mercedes-Benz: simplified 3-pointed star on a thin ring (representative mark) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Mercedes-Benz">
+  <g fill="none" stroke="#0E0E10" stroke-width="6">
+    <circle cx="120" cy="120" r="108"/>
+  </g>
+  <g fill="#0E0E10" stroke="#0E0E10" stroke-width="3" stroke-linejoin="round">
+    <!-- Y-shape: three radial spokes meeting at the hub -->
+    <path d="M 120 120 L 120 14 L 130 14 L 120 32 Z"/>
+    <path d="M 120 120 L 218 175 L 213 184 L 196 175 Z"/>
+    <path d="M 120 120 L 22 175 L 27 184 L 44 175 Z"/>
+    <circle cx="120" cy="120" r="9"/>
+  </g>
+</svg>
