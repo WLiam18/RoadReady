@@ -17,13 +17,7 @@ pipeline {
 
         stage('Restore') {
             steps {
-                sh 'dotnet restore RoadReady.sln'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'dotnet build RoadReady.sln --no-restore'
+                sh 'dotnet restore RoadReady.slnx'
             }
         }
 
@@ -36,7 +30,7 @@ pipeline {
                     /d:sonar.host.url="http://localhost:9000" \
                     /d:sonar.login=$SONAR_TOKEN
 
-                    dotnet build RoadReady.sln
+                    dotnet build RoadReady.slnx
 
                     dotnet sonarscanner end \
                     /d:sonar.login=$SONAR_TOKEN
@@ -47,7 +41,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'dotnet test RoadReady.sln'
+                sh 'dotnet test RoadReady.slnx'
             }
         }
     }
