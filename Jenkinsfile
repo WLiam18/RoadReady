@@ -3,72 +3,126 @@ pipeline {
     agent any
 
     environment {
-        PATH = "/Users/williamgiftson/.dotnet/tools:/usr/local/share/dotnet:${env.PATH}"
+
+        PATH = "/Users/williamgiftson/.dotnet/tools:/usr/local/share/dotnet:/opt/homebrew/opt/openjdk@21/bin:${env.PATH}"
+
+        JAVA_HOME = "/opt/homebrew/opt/openjdk@21"
+
         SONAR_TOKEN = credentials('sonar-token')
     }
 
+
     stages {
 
+
         stage('Checkout') {
+
             steps {
+
                 git branch: 'main',
                     credentialsId: 'github-creds',
                     url: 'https://github.com/WLiam18/RoadReady.git'
             }
         }
 
+
+
         stage('Restore') {
-            steps {
-                sh 'dotnet restore RoadReady.slnx'
-            }
-        }
 
-        stage('Check Tools') {
             steps {
+
                 sh '''
-                echo "Checking environment..."
+                export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+                export PATH=$JAVA_HOME/bin:$PATH
 
-                whoami
-
-                echo "Dotnet location:"
-                which dotnet
-
-                echo "SonarScanner location:"
-                which dotnet-sonarscanner
-
-                echo "Dotnet version:"
-                dotnet --version
-
-                echo "SonarScanner version:"
-                dotnet sonarscanner --version || true
+                dotnet restore RoadReady.slnx
                 '''
             }
         }
 
-        stage('SonarQube Analysis') {
+
+
+        stage('Check Environment') {
+
             steps {
+
+                sh '''
+                echo "===== USER ====="
+                whoami
+
+
+                echo "===== DOTNET ====="
+                which dotnet
+                dotnet --version
+
+
+                echo "===== SONAR SCANNER ====="
+                which dotnet-sonarscanner
+
+
+                echo "===== JAVA ====="
+                export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+                export PATH=$JAVA_HOME/bin:$PATH
+
+                echo $JAVA_HOME
+                which java
+                java -version
+                '''
+            }
+        }
+
+
+
+        stage('SonarQube Analysis') {
+
+            steps {
+
                 withSonarQubeEnv('SonarQube') {
+
                     sh '''
-                    echo "Starting SonarQube Analysis..."
+                    export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+                    export PATH=$JAVA_HOME/bin:$PATH
+
+
+                    echo "Starting Sonar Analysis"
+
 
                     dotnet sonarscanner begin \
                     /k:"RoadReady" \
                     /d:sonar.host.url="http://localhost:9000" \
                     /d:sonar.login=$SONAR_TOKEN
 
-                    dotnet build RoadReady.slnx
+
+
+                    dotnet build RoadReady.slnx --no-restore
+
+
 
                     dotnet sonarscanner end \
                     /d:sonar.login=$SONAR_TOKEN
+
+
+                    echo "Sonar Analysis Completed"
                     '''
                 }
             }
         }
 
+
+
         stage('Test') {
+
             steps {
-                sh 'dotnet test RoadReady.slnx'
+
+                sh '''
+                echo "Running Tests"
+
+                dotnet test RoadReady.slnx --no-restore
+
+                echo "Tests Completed"
+                '''
             }
         }
+
     }
 }
