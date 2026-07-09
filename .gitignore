@@ -33,4 +33,4 @@ logs/
 
 
 RoadReady.BookingService/wwwroot/uploads/
-RoadReady.CarService/wwwroot/
+RoadReady.CarService/wwwroot/.sonarqube/

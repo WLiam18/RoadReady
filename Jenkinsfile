@@ -1,51 +1,63 @@
-stages {
+pipeline {
 
-    stage('Checkout') {
-        steps {
-            git branch: 'main',
-                credentialsId: 'github-creds',
-                url: 'https://github.com/WLiam18/RoadReady.git'
-        }
+    agent any
+
+    environment {
+        PATH = "/Users/williamgiftson/.dotnet/tools:/usr/local/share/dotnet:${env.PATH}"
+        SONAR_TOKEN = credentials('sonar-token')
     }
 
-    stage('Restore') {
-        steps {
-            sh 'dotnet restore RoadReady.slnx'
-        }
-    }
+    stages {
 
-    stage('Check Tools') {
-        steps {
-            sh '''
-            whoami
-            which dotnet
-            which dotnet-sonarscanner
-            dotnet sonarscanner --version
-            '''
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    credentialsId: 'github-creds',
+                    url: 'https://github.com/WLiam18/RoadReady.git'
+            }
         }
-    }
 
-    stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('SonarQube') {
+        stage('Restore') {
+            steps {
+                sh 'dotnet restore RoadReady.slnx'
+            }
+        }
+
+        stage('Check Tools') {
+            steps {
                 sh '''
-                dotnet sonarscanner begin \
-                /k:"RoadReady" \
-                /d:sonar.host.url="http://localhost:9000" \
-                /d:sonar.login=$SONAR_TOKEN
-
-                dotnet build RoadReady.slnx
-
-                dotnet sonarscanner end \
-                /d:sonar.login=$SONAR_TOKEN
+                echo "Checking environment..."
+                whoami
+                which dotnet
+                which dotnet-sonarscanner
+                dotnet --version
+                dotnet sonarscanner --version
                 '''
             }
         }
-    }
 
-    stage('Test') {
-        steps {
-            sh 'dotnet test RoadReady.slnx'
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                    dotnet sonarscanner begin \
+                    /k:"RoadReady" \
+                    /d:sonar.host.url="http://localhost:9000" \
+                    /d:sonar.login=$SONAR_TOKEN
+
+                    dotnet build RoadReady.slnx
+
+                    dotnet sonarscanner end \
+                    /d:sonar.login=$SONAR_TOKEN
+                    '''
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'dotnet test RoadReady.slnx'
+            }
         }
     }
 }
