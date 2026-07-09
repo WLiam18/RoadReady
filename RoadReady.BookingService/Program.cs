@@ -64,6 +64,12 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateBookingRequestValidator>();
 
+builder.Services.AddHttpClient(); // for InspectionService → AuthService / CarService fetches
+builder.Services.AddHttpClient<IBookingService, BookingService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CarServiceBaseUrl"]!);
+});
+
 builder.Services.AddDbContext<BookingDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
