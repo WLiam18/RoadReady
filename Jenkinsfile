@@ -27,11 +27,20 @@ pipeline {
             steps {
                 sh '''
                 echo "Checking environment..."
+
                 whoami
+
+                echo "Dotnet location:"
                 which dotnet
+
+                echo "SonarScanner location:"
                 which dotnet-sonarscanner
+
+                echo "Dotnet version:"
                 dotnet --version
-                dotnet sonarscanner --version
+
+                echo "SonarScanner version:"
+                dotnet sonarscanner --version || true
                 '''
             }
         }
@@ -40,6 +49,8 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh '''
+                    echo "Starting SonarQube Analysis..."
+
                     dotnet sonarscanner begin \
                     /k:"RoadReady" \
                     /d:sonar.host.url="http://localhost:9000" \
