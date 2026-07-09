@@ -114,8 +114,8 @@ export default function HomePage() {
           {/* Headline + CTA */}
           <div className="max-w-xl">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-[1.1] tracking-tight text-white">
-              Easy And Fast Way<br />
-              To <span className="underline decoration-4 underline-offset-8 decoration-white">Rent</span> Your Car
+              Find Freedom Behind <br />
+              <span className="underline decoration-4 underline-offset-8 decoration-white">Every</span> Wheel
             </h1>
             <p className="mt-4 text-white/70 text-sm sm:text-base max-w-md leading-relaxed">
               We offer a wide range of rental cars to suit your needs. Whether you're planning a weekend getaway, a business trip, or a same-day city hop.

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ChevronDownIcon, MapPinIcon, LogOutIcon } from './icons';
 
-export default function TopHeader({ location = 'San Francisco, US' }) {
+export default function TopHeader({ location = 'India' }) {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);

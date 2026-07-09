@@ -122,7 +122,7 @@ public class PromoCodeService : IPromoCodeService
         if (promo.MinBookingAmount.HasValue && request.BookingAmount < promo.MinBookingAmount.Value)
         {
             return ApiResponse<ValidatePromoResponseDto>.Ok(
-                BuildInvalid($"Minimum booking amount of {promo.MinBookingAmount:C} required for this promo code."),
+                BuildInvalid("Minimum booking amount of {promo.MinBookingAmount:C} required for this promo code."),
                 "Promo code requirements not met.");
         }
 
@@ -142,7 +142,7 @@ public class PromoCodeService : IPromoCodeService
             DiscountType = promo.DiscountType,
             DiscountAmount = discount,
             FinalAmount = request.BookingAmount - discount,
-            Message = $"You saved {discount:C} on this booking."
+            Message = $"You saved ₹{discount:N2} on this booking."
         };
 
         return ApiResponse<ValidatePromoResponseDto>.Ok(response, "Promo code is valid.");
