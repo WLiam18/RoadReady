@@ -90,6 +90,12 @@ public sealed class ResendEmailService : IEmailService
     public Task<bool> SendWelcomeAsync(string toEmail, string toName) =>
         SendAsync(toEmail, toName, "Welcome to RoadReady", EmailTemplates.Welcome(toName));
 
+    public Task<bool> SendCheckOutConfirmationAsync(string toEmail, string toName, int bookingId, string carMakeModel) =>
+        SendAsync(toEmail, toName, $"Your vehicle is ready - drive safely", EmailTemplates.CheckOutConfirmation(toName, bookingId, carMakeModel));
+
+    public Task<bool> SendCheckInCompletionAsync(string toEmail, string toName, int bookingId, string carMakeModel) =>
+        SendAsync(toEmail, toName, $"Thanks for choosing RoadReady - Booking #{bookingId}", EmailTemplates.CheckInCompletion(toName, bookingId, carMakeModel));
+
     private sealed class ResendPayload
     {
         [JsonPropertyName("from")] public string From { get; set; } = "";

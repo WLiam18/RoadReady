@@ -8,14 +8,29 @@ public static class EmailServiceCollectionExtensions
 {
     public static IServiceCollection AddRoadReadyEmail(this IServiceCollection services, IConfiguration configuration)
     {
-        var apiKey = configuration["Resend:ApiKey"];
-        if (string.IsNullOrWhiteSpace(apiKey) || apiKey.StartsWith("PLACEHOLDER", StringComparison.OrdinalIgnoreCase))
+        var provider = (configuration["Email:Provider"] ?? "Brevo").Trim();
+
+        if (string.Equals(provider, "Brevo", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddSingleton<IEmailService, NullEmailService>();
+            var apiKey = configuration["Brevo:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                services.AddSingleton<IEmailService, NullEmailService>();
+                return services;
+            }
+            services.AddHttpClient<IEmailService, BrevoEmailService>();
             return services;
         }
 
-        services.AddHttpClient<IEmailService, ResendEmailService>();
+        var resendKey = configuration["Resend:ApiKey"];
+        if (string.Equals(provider, "Resend", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(resendKey))
+        {
+            services.AddHttpClient<IEmailService, ResendEmailService>();
+            return services;
+        }
+
+        services.AddSingleton<IEmailService, NullEmailService>();
         return services;
     }
 }
@@ -56,6 +71,18 @@ internal sealed class NullEmailService : IEmailService
     public Task<bool> SendWelcomeAsync(string toEmail, string toName)
     {
         _logger.LogWarning("[Stub email] Welcome to {Email}", toEmail);
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SendCheckOutConfirmationAsync(string toEmail, string toName, int bookingId, string carMakeModel)
+    {
+        _logger.LogWarning("[Stub email] Check-out confirmation for #{BookingId} -> {Email}", bookingId, toEmail);
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SendCheckInCompletionAsync(string toEmail, string toName, int bookingId, string carMakeModel)
+    {
+        _logger.LogWarning("[Stub email] Check-in / review-request for #{BookingId} -> {Email}", bookingId, toEmail);
         return Task.FromResult(false);
     }
 }

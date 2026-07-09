@@ -116,4 +116,42 @@ public static class EmailTemplates
            <p style='margin:16px 0 0;color:{BrandMuted};font-size:13px;line-height:1.6;'>If you ever need help, just hit reply &mdash; we're always one message away.</p>
            <p style='margin:24px 0 0;color:{BrandBody};font-size:15px;'>Cheers,<br/><strong>The RoadReady Team</strong></p>"
     );
+
+    public static string CheckOutConfirmation(string toName, int bookingId, string carMakeModel) => Layout(
+        $"Your vehicle is ready &mdash; Booking #{bookingId}",
+        $@"<p style='margin:0 0 16px;color:{BrandBody};font-size:15px;line-height:1.6;'>Hi <strong>{toName}</strong>,</p>
+           <p style='margin:0 0 16px;color:{BrandBody};font-size:15px;line-height:1.6;'>Great news &mdash; your <strong>{carMakeModel}</strong> is checked out and ready for pickup.</p>
+           <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background:#ecfdf5;border-left:4px solid #22C55E;border-radius:8px;margin:16px 0;'>
+             <tr><td style='padding:16px;'>
+               <p style='margin:0;color:{BrandBody};font-size:14px;line-height:1.5;'><strong>Enjoy the ride!</strong></p>
+               <p style='margin:8px 0 0;color:{BrandBody};font-size:13px;line-height:1.5;'>Insurance, 24/7 roadside assistance, and unlimited km are already activated for this booking.</p>
+             </td></tr>
+           </table>
+           <p style='margin:16px 0;color:{BrandBody};font-size:15px;line-height:1.6;'>A few reminders before you head off:</p>
+           <ul style='margin:0 0 16px;padding-left:20px;color:{BrandBody};font-size:14px;line-height:1.7;'>
+             <li>Carry your driver's license and the booking ID at all times.</li>
+             <li>Do a quick walk-around to confirm the photos taken at checkout.</li>
+             <li>Return the vehicle with the same fuel level to avoid refuelling charges.</li>
+           </ul>
+           <p style='margin:16px 0 0;color:{BrandMuted};font-size:13px;line-height:1.6;'>Drive safe and have a great trip. If you need anything during the rental, just reply to this email.</p>
+           <p style='margin:24px 0 0;color:{BrandBody};font-size:15px;'>Cheers,<br/><strong>The RoadReady Team</strong></p>"
+    );
+
+    public static string CheckInCompletion(string toName, int bookingId, string carMakeModel) => Layout(
+        $"Thanks for choosing RoadReady &mdash; Booking #{bookingId}",
+        $@"<p style='margin:0 0 16px;color:{BrandBody};font-size:15px;line-height:1.6;'>Hi <strong>{toName}</strong>,</p>
+           <p style='margin:0 0 16px;color:{BrandBody};font-size:15px;line-height:1.6;'>Thanks for returning the <strong>{carMakeModel}</strong> &mdash; we hope you had a great ride!</p>
+           <p style='margin:0 0 16px;color:{BrandBody};font-size:15px;line-height:1.6;'>Your booking <strong>#{bookingId}</strong> is now marked as completed. Your receipt and any refund details (if applicable) have been emailed separately.</p>
+           <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background:#fff7ed;border-left:4px solid #FF6B35;border-radius:8px;margin:24px 0;'>
+             <tr><td style='padding:20px;'>
+               <p style='margin:0 0 8px;color:{BrandBody};font-size:14px;line-height:1.5;'><strong>Got 30 seconds?</strong></p>
+               <p style='margin:0 0 12px;color:{BrandBody};font-size:14px;line-height:1.5;'>A quick review helps the next renter &mdash; and helps us improve.</p>
+               <p style='margin:12px 0 0;'>
+                 <a href='{{REVIEW_URL}}' style='display:inline-block;background-color:#FF6B35;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;'>Leave a review</a>
+               </p>
+             </td></tr>
+           </table>
+           <p style='margin:16px 0 0;color:{BrandMuted};font-size:13px;line-height:1.6;'>Thanks again &mdash; we'd love to see you on your next trip.</p>
+           <p style='margin:24px 0 0;color:{BrandBody};font-size:15px;'>Warmly,<br/><strong>The RoadReady Team</strong></p>"
+    );
 }

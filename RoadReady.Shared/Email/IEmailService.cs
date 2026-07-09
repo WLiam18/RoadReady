@@ -7,4 +7,6 @@ public interface IEmailService
     Task<bool> SendPaymentReceiptAsync(string toEmail, string toName, int bookingId, string carMakeModel, decimal amount, string receiptUrl);
     Task<bool> SendBookingCancellationAsync(string toEmail, string toName, int bookingId, string carMakeModel, decimal refundAmount);
     Task<bool> SendWelcomeAsync(string toEmail, string toName);
+    Task<bool> SendCheckOutConfirmationAsync(string toEmail, string toName, int bookingId, string carMakeModel);
+    Task<bool> SendCheckInCompletionAsync(string toEmail, string toName, int bookingId, string carMakeModel);
 }
