@@ -39,6 +39,23 @@ public class BookingService : IBookingService
 
     public async Task<ApiResponse<BookingDto>> CreateAsync(Guid userId, CreateBookingRequestDto request)
     {
+        // Sweep abandoned checkouts older than 24h — frees up date ranges so
+        // users who closed the Razorpay tab don't permanently lock a car.
+        // Fail-safe: if the janitor hits a transient DB issue, log and carry
+        // on — the cleanup is non-critical to creating a new booking.
+        try
+        {
+            var expired = await _bookingRepository.ExpireStalePendingBookingsAsync(TimeSpan.FromHours(24));
+            if (expired > 0)
+            {
+                _logger.LogInformation("Cancelled {Count} abandoned PendingPayment bookings (>24h old).", expired);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ExpireStalePendingBookingsAsync failed — continuing without cleanup.");
+        }
+
         if (request.PickupDate >= request.DropoffDate)
         {
             return ApiResponse<BookingDto>.Fail("Drop-off date must be after pick-up date.");
@@ -104,10 +121,24 @@ public class BookingService : IBookingService
         {
             var keyId = _configuration["Razorpay:KeyId"];
             var keySecret = _configuration["Razorpay:KeySecret"];
-            
+
+            if (string.IsNullOrWhiteSpace(keyId) || string.IsNullOrWhiteSpace(keySecret))
+            {
+                _logger.LogError("Razorpay keys are not configured. Set Razorpay:KeyId and Razorpay:KeySecret via user-secrets.");
+                return ApiResponse<BookingDto>.Fail("Payment gateway is not configured. Contact admin.");
+            }
+
             RazorpayClient client = new RazorpayClient(keyId, keySecret);
 
-            int amountInPaise = (int)(totalAmount * 100);
+            int amountInPaise = (int)(Math.Round(totalAmount * 100m));
+            if (amountInPaise < 100)
+            {
+                _logger.LogError("Amount {Amount} is below Razorpay minimum (1 INR).", totalAmount);
+                return ApiResponse<BookingDto>.Fail("Booking amount too small for online payment.");
+            }
+
+            var frontendBase = _configuration["App:FrontendBaseUrl"] ?? "http://localhost:3000";
+            var callbackUrl = $"{frontendBase.TrimEnd('/')}/my-bookings/{booking.Id}";
 
             Dictionary<string, object> paymentLinkRequest = new Dictionary<string, object>
             {
@@ -115,8 +146,10 @@ public class BookingService : IBookingService
                 { "currency", "INR" },
                 { "accept_partial", false },
                 { "description", $"RoadReady Rental: {booking.CarMake} {booking.CarModel}" },
-                { "reference_id", $"BOOKING_{booking.Id}" }, 
-                { "reminder_enable", true }
+                { "reference_id", $"BOOKING_{booking.Id}" },
+                { "reminder_enable", true },
+                { "callback_url", callbackUrl },
+                { "callback_method", "get" }
             };
 
             PaymentLink paymentLink = client.PaymentLink.Create(paymentLinkRequest);
@@ -135,15 +168,40 @@ public class BookingService : IBookingService
 
             await _bookingRepository.UpdateAsync(booking);
             await _bookingRepository.SaveAsync();
-            
-            _logger.LogInformation("Razorpay Link created for BookingId: {BookingId}", booking.Id);
+
+            _logger.LogInformation("Razorpay Link created for BookingId: {BookingId} -> {Url}", booking.Id, payment.PaymentUrl);
 
             await SendBookingConfirmationEmailAsync(booking, payment.PaymentUrl);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create Razorpay Payment Link for BookingId: {BookingId}", booking.Id);
-            return ApiResponse<BookingDto>.Fail("Booking created, but payment link generation failed. Please try again.");
+
+            // Try to surface Razorpay's actual error message.
+            // The SDK throws generic ServerError for non-200 responses; the
+            // original error description is often readable via InnerException / Message.
+            var innerMsg = ex.InnerException?.Message;
+            var rawMsg = !string.IsNullOrWhiteSpace(innerMsg) ? innerMsg : ex.Message;
+
+            // Razorpay returns errors like {"error":{"code":"BAD_REQUEST_ERROR","description":"..."}}
+            // but the SDK v3 doesn't always parse them. Extract any readable description.
+            string friendly;
+            if (rawMsg.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+                || rawMsg.Contains("RATE_LIMIT", StringComparison.OrdinalIgnoreCase))
+            {
+                friendly = "Razorpay test-mode daily limit reached (30 payment links/day). Try tomorrow or generate a fresh test key.";
+            }
+            else if (rawMsg.Contains("Authentication", StringComparison.OrdinalIgnoreCase)
+                  || rawMsg.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
+            {
+                friendly = "Razorpay credentials are invalid. Check Razorpay:KeyId / KeySecret in user-secrets.";
+            }
+            else
+            {
+                friendly = $"Razorpay rejected the request: {rawMsg}";
+            }
+
+            return ApiResponse<BookingDto>.Fail(friendly);
         }
 
         return ApiResponse<BookingDto>.Created(MapToDto(booking), "Booking created successfully. Please complete the payment.");
@@ -523,11 +581,47 @@ internal class ValidatePromoResponse
 
 internal static class DateTimeCombiner
 {
+    // IST = UTC+5:30. We hardcode this because the deployment region is India.
+    // PickupDate values that arrive as Unspecified (no zone) represent the
+    // user's local wall-clock as it'll be displayed back; we treat those
+    // values as IST instants for any time-zone-sensitive math.
+    private const int IstOffsetMinutes = 330;
+
+    /// <summary>
+    /// Returns a UTC `DateTime` regardless of the input kind:
+    ///   - Utc         → used as-is
+    ///   - Local       → converted via ToUniversalTime()
+    ///   - Unspecified → assumed to be IST wall-clock (deployment default),
+    ///                   so subtracted by the IST offset to get UTC.
+    /// Older clients sent Unspecified string-only ISO; recent clients send
+    /// the proper Utc ISO from toISOString() on the frontend.
+    /// </summary>
+    public static DateTime AsUtc(DateTime dt, string timeOfDay)
+    {
+        if (TimeSpan.TryParse(timeOfDay, out var ts))
+        {
+            return dt.Kind switch
+            {
+                DateTimeKind.Utc => dt,
+                DateTimeKind.Local => dt.ToUniversalTime(),
+                _ => new DateTime(dt.Year, dt.Month, dt.Day, ts.Hours, ts.Minutes, 0, DateTimeKind.Utc)
+                     .AddMinutes(-IstOffsetMinutes),
+            };
+        }
+        return dt.Kind == DateTimeKind.Local ? dt.ToUniversalTime() : dt;
+    }
+
+    // Legacy combine logic kept in case it's called elsewhere.
     public static DateTime Combine(DateTime date, string time)
     {
         if (TimeSpan.TryParse(time, out var ts))
         {
-            return date.Date + ts;
+            return date.Kind switch
+            {
+                DateTimeKind.Utc => date,
+                DateTimeKind.Local => date.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(date.Date + ts, DateTimeKind.Utc),
+            };
         }
         return date;
     }

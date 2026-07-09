@@ -76,10 +76,27 @@ public class BookingRepository : IBookingRepository
     {
         return await _context.Bookings.AnyAsync(b =>
             b.CarId == carId &&
+            // Booking only "holds" the car once payment succeeded (Confirmed, Active,
+            // Completed). PendingPayment (no pay yet) and Cancelled must not block —
+            // otherwise abandoned checkouts permanently lock the car.
             b.Status != BookingStatus.Cancelled &&
+            b.Status != BookingStatus.PendingPayment &&
             (!excludeBookingId.HasValue || b.Id != excludeBookingId.Value) &&
             pickupDate < b.DropoffDate &&
             dropoffDate > b.PickupDate);
+    }
+
+    /// <summary>
+    /// Marks bookings that have been PendingPayment for too long as Cancelled so
+    /// their date ranges free up. Called by BookingService on startup and after
+    /// every successful CreateAsync.
+    /// </summary>
+    public async Task<int> ExpireStalePendingBookingsAsync(TimeSpan olderThan)
+    {
+        var cutoff = DateTime.UtcNow.Subtract(olderThan);
+        return await _context.Bookings
+            .Where(b => b.Status == BookingStatus.PendingPayment && b.CreatedAt < cutoff)
+            .ExecuteUpdateAsync(b => b.SetProperty(x => x.Status, BookingStatus.Cancelled));
     }
 
     public async Task<Booking?> GetByIdWithPaymentsAsync(int id)

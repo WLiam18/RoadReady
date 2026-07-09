@@ -152,7 +152,7 @@ public class BookingServiceTests
 
         _mockRepo.Verify(repo => repo.AddAsync(It.IsAny<Booking>()), Times.Once);
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Message, Does.Contain("payment link generation failed"));
+        Assert.That(result.Message, Does.Contain("Razorpay"));
     }
 
     [Test]

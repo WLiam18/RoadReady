@@ -48,9 +48,21 @@ public class WebhooksController : ControllerBase
 
         var signature = Request.Headers["X-Razorpay-Signature"].FirstOrDefault();
         var webhookSecret = _configuration["Razorpay:WebhookSecret"];
+        var webhookKeyId = _configuration["Razorpay:KeyId"];
+        var webhookKeySecret = _configuration["Razorpay:KeySecret"];
+
+        _logger.LogInformation(
+            "Razorpay webhook hit. URI={Uri} Signature?={HasSig} Secret?={HasSecret} BodyLen={Len} KeyConfigured?={HasKey}",
+            Request.Path.Value,
+            !string.IsNullOrEmpty(signature),
+            !string.IsNullOrEmpty(webhookSecret),
+            jsonBody.Length,
+            !string.IsNullOrEmpty(webhookKeyId) && !string.IsNullOrEmpty(webhookKeySecret)
+        );
 
         if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(webhookSecret))
         {
+            _logger.LogWarning("Rejecting webhook — missing signature or secret.");
             return BadRequest("Missing Signature or Secret.");
         }
 
@@ -70,6 +82,8 @@ public class WebhooksController : ControllerBase
                     .GetProperty("entity")
                     .GetProperty("reference_id")
                     .GetString();
+
+                _logger.LogInformation("Webhook event={Event} referenceId={ReferenceId}", eventName, referenceId);
 
                 if (!string.IsNullOrEmpty(referenceId) && referenceId.StartsWith("BOOKING_"))
                 {
@@ -95,15 +109,27 @@ public class WebhooksController : ControllerBase
 
                             await TryGenerateReceiptAndNotifyAsync(booking);
                         }
+                        else if (booking == null)
+                        {
+                            _logger.LogWarning("Webhook for BookingId={BookingId} but no booking found in DB.", bookingId);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Webhook for BookingId={BookingId} already in status {Status}, no-op.", bookingId, booking.Status);
+                        }
                     }
                 }
+            }
+            else
+            {
+                _logger.LogInformation("Webhook event={Event} ignored (not handled).", eventName);
             }
 
             return Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Razorpay Webhook failed verification or processing.");
+            _logger.LogError(ex, "Razorpay Webhook failed verification or processing. Body preview: {Preview}", jsonBody.Substring(0, Math.Min(500, jsonBody.Length)));
             return BadRequest();
         }
     }
