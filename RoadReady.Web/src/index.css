@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { min-height: 100vh; background: #F5F5F5; color: #0E0E10; }
+  h1, h2, h3, h4 { @apply font-semibold tracking-tight; }
+  a { @apply transition-colors; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97];
+  }
+  .btn-primary {
+    @apply bg-brand-ink text-white hover:bg-gray-800 focus:ring-brand-ink/30 shadow-sm;
+  }
+  .btn-outline {
+    @apply border-2 border-brand-ink text-brand-ink hover:bg-brand-ink hover:text-white focus:ring-brand-ink/20;
+  }
+  .btn-ghost {
+    @apply text-brand-muted hover:text-brand-ink hover:bg-gray-100 focus:ring-gray-300;
+  }
+  .btn-danger {
+    @apply bg-brand-danger text-white hover:bg-red-700 focus:ring-red-500/30;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+
+  .input {
+    @apply block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm placeholder:text-gray-400 focus:border-brand-ink focus:ring-2 focus:ring-brand-ink/10 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .input:focus {
+    border-color: #0E0E10;
+    box-shadow: 0 0 0 3px rgba(14,14,16,0.06);
+  }
+  .label {
+    @apply block text-sm font-semibold text-brand-ink mb-1.5;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-gray-100 overflow-hidden transition-shadow duration-200;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card-hover {
+    @apply card cursor-pointer;
+  }
+  .card-hover:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+  }
+
+  /* Loading shimmer */
+  .shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-success { @apply bg-emerald-50 text-emerald-700; }
+  .badge-danger  { @apply bg-red-50 text-red-700; }
+  .badge-warning { @apply bg-amber-50 text-amber-700; }
+  .badge-info    { @apply bg-gray-50 text-gray-600; }
+  .badge-neutral { @apply bg-gray-50 text-gray-500; }
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+/* ---- Infinite brand marquee ---- */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 32s linear infinite;
+}
+.marquee-track.paused { animation-play-state: paused; }
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ---- Headline gradient-text helper (kept grayscale, just darker tone) ---- */
+.headline-emphasis { color: #0E0E10; }
+
+/* ---- Hairline divider ---- */
+.hairline { border-top: 1px solid #E5E7EB; }
