@@ -7,4 +7,5 @@ public interface IInspectionService
 {
     Task<ApiResponse<string>> ProcessCheckOutAsync(int bookingId, Guid agentId, CreateInspectionRequestDto request);
     Task<ApiResponse<string>> ProcessCheckInAsync(int bookingId, Guid agentId, CreateInspectionRequestDto request);
+    Task<ApiResponse<BookingInspectionSummaryDto>> GetHistoryForBookingAsync(int bookingId);
 }

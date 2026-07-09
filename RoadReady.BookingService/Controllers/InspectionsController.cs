@@ -4,16 +4,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RoadReady.BookingService.Interfaces;
 using RoadReady.Shared.DTOs.Booking;
+using RoadReady.Shared.Responses;
 
 namespace RoadReady.BookingService.Controllers;
 
 [ApiController]
 [Route("api/v1/bookings/{bookingId}/inspections")]
-[Authorize(Roles = "RentalAgent,Admin")] 
+[Authorize(Roles = "RentalAgent,Admin")]
 public class InspectionsController : ControllerBase
 {
     private readonly IInspectionService _inspectionService;
-    private readonly IValidator<CreateInspectionRequestDto> _validator; 
+    private readonly IValidator<CreateInspectionRequestDto> _validator;
 
     public InspectionsController(IInspectionService inspectionService, IValidator<CreateInspectionRequestDto> validator)
     {
@@ -50,6 +51,17 @@ public class InspectionsController : ControllerBase
         }
 
         var result = await _inspectionService.ProcessCheckInAsync(bookingId, agentId, request);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Returns all inspections recorded against a booking so the agent can
+    /// review prior photos before / after the current check-in or check-out.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetHistory(int bookingId)
+    {
+        var result = await _inspectionService.GetHistoryForBookingAsync(bookingId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 }
